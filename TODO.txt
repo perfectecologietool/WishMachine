@@ -1,0 +1,3 @@
+ There are many things that can be done at a single level of the Decomposition tree's growth. 
+ The information can be parsed onto a causality graph. 
+ THe information can be purged of empty variables. 

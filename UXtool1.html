@@ -1,0 +1,889 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>C234 Ollama Interface - Quipu Edition</title>
+    <!-- Tailwind CSS for modern styling -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="/Tone.js"></script>
+    <script type="text/javascript" src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"></script>
+    <!-- Google Fonts for a clean, modern typeface -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <!-- Marked.js for markdown rendering in Knot Reader -->
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <style>
+        /* Custom styles to complement Tailwind */
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #0f172a;
+            /* slate-900 */
+            color: #cbd5e1;
+            /* slate-300 */
+
+            /* --- ACCESSIBILITY ENHANCEMENT --- */
+            /* Increase base font size for overall readability. */
+            font-size: 18px;
+            /* Increase letter spacing to help separate characters for users with astigmatism. */
+            letter-spacing: 0.025em;
+        }
+
+        /* --- ACCESSIBILITY ENHANCEMENT: Increase header sizes --- */
+        h1 {
+            font-size: 2.5rem;
+        }
+
+        /* Was 2.25rem */
+        h2,
+        details>summary {
+            font-size: 1.75rem;
+        }
+
+        /* Was 1.5rem / 1.25rem */
+        h3 {
+            font-size: 1.25rem;
+        }
+
+        /* Was 1.125rem */
+
+
+        /* Style for the collapsible details tag */
+        details>summary {
+            cursor: pointer;
+            padding: 1.25rem;
+            /* Increased padding */
+            background-color: #1e293b;
+            /* slate-800 */
+            border-radius: 0.5rem;
+            font-weight: 600;
+            transition: background-color 0.2s ease-in-out;
+        }
+
+        details>summary:hover {
+            background-color: #334155;
+            /* slate-700 */
+        }
+
+        details[open]>summary {
+            border-bottom-left-radius: 0;
+            border-bottom-right-radius: 0;
+        }
+
+        .details-content {
+            padding: 1.5rem;
+            background-color: #1e293b;
+            /* slate-800 */
+            border-bottom-left-radius: 0.5rem;
+            border-bottom-right-radius: 0.5rem;
+        }
+
+        /* Custom scrollbar for better aesthetics */
+        ::-webkit-scrollbar {
+            width: 10px;
+            /* Wider scrollbar */
+        }
+
+        ::-webkit-scrollbar-track {
+            background: #1e293b;
+            /* slate-800 */
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: #475569;
+            /* slate-600 */
+            border-radius: 5px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: #64748b;
+            /* slate-500 */
+        }
+
+        /* Custom styles for tables used by the Quipu/Scenario systems */
+        .quipu-collca,
+        .scenario-table {
+            width: 100%;
+            border-collapse: separate;
+            /* ACCESSIBILITY: Increased spacing between rows */
+            border-spacing: 0 1rem;
+        }
+
+        .quipu-collca th,
+        .quipu-collca td,
+        .scenario-table th,
+        .scenario-table td {
+            border: 1px solid #334155;
+            /* slate-700 */
+            /* ACCESSIBILITY: Increased padding inside cells */
+            padding: 1rem;
+            vertical-align: top;
+            background-color: #0f172a;
+            /* slate-900 */
+        }
+
+        .strand-header,
+        .row-control-console {
+            background-color: #334155;
+            /* slate-700 */
+        }
+
+        .knot-container,
+        .cell-content {
+            display: flex;
+            flex-direction: column;
+            /* ACCESSIBILITY: Increased gap between elements inside a knot/cell */
+            gap: 1rem;
+        }
+
+        /* General input styling */
+        input[type="text"],
+        input[type="number"],
+        textarea,
+        select {
+            background-color: #334155;
+            /* slate-700 */
+            border: 1px solid #475569;
+            /* slate-600 */
+            border-radius: 0.375rem;
+            /* ACCESSIBILITY: Increased font size and padding for inputs */
+            font-size: 1rem;
+            padding: 0.75rem 1rem;
+            width: 100%;
+            color: white;
+        }
+
+        button {
+            background-color: #2563eb !important;
+            /* blue-600 */
+            color: white !important;
+            /* ACCESSIBILITY: Increased font size and padding for buttons */
+            padding: 0.75rem 1.25rem !important;
+            font-size: 1rem !important;
+            border-radius: 0.375rem !important;
+            font-weight: 500 !important;
+            transition: background-color 0.2s;
+            border: none !important;
+        }
+
+        button:hover {
+            background-color: #1d4ed8 !important;
+            /* blue-700 */
+        }
+
+        button:disabled {
+            background-color: #475569 !important;
+            /* slate-600 */
+            cursor: not-allowed;
+        }
+
+        /* ═══════════════════════════════════════════════ */
+        /*  KNOT READER — Neon Carousel Styles            */
+        /* ═══════════════════════════════════════════════ */
+        .knot-reader-section {
+            background: #0a0a1a;
+            border: 1px solid #00ffcc;
+            border-radius: 12px;
+            box-shadow: 0 0 15px rgba(0, 255, 204, 0.15), inset 0 0 30px rgba(0, 255, 204, 0.03);
+            overflow: hidden;
+        }
+
+        .knot-reader-controls {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 14px 18px;
+            background: linear-gradient(135deg, #0d0d2b 0%, #0a0a1a 100%);
+            border-bottom: 1px solid rgba(0, 255, 204, 0.2);
+            flex-wrap: wrap;
+        }
+
+        .knot-reader-controls select {
+            background: #12122a;
+            color: #00ffcc;
+            border: 1px solid #00ffcc44;
+            border-radius: 6px;
+            padding: 6px 12px;
+            font-family: 'Inter', monospace;
+            font-size: 0.9rem;
+            min-width: 200px;
+        }
+
+        .knot-reader-controls select:focus {
+            outline: none;
+            box-shadow: 0 0 8px rgba(0, 255, 204, 0.4);
+        }
+
+        .knot-reader-nav-btn {
+            background: linear-gradient(135deg, #1a1a3e, #12122a) !important;
+            color: #00ffcc !important;
+            border: 1px solid #00ffcc55 !important;
+            padding: 6px 14px !important;
+            font-size: 0.95rem !important;
+            border-radius: 6px !important;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .knot-reader-nav-btn:hover:not(:disabled) {
+            background: linear-gradient(135deg, #252555, #1a1a3e) !important;
+            box-shadow: 0 0 10px rgba(0, 255, 204, 0.3);
+            border-color: #00ffcc !important;
+        }
+
+        .knot-reader-nav-btn:disabled {
+            opacity: 0.3;
+            cursor: not-allowed;
+            background: #0d0d2b !important;
+        }
+
+        .knot-reader-position {
+            color: #00ffcc;
+            font-family: 'Inter', monospace;
+            font-weight: 600;
+            font-size: 0.95rem;
+            min-width: 60px;
+            text-align: center;
+            text-shadow: 0 0 8px rgba(0, 255, 204, 0.4);
+        }
+
+        .knot-reader-focus-btn {
+            background: linear-gradient(135deg, #2a0a2a, #1a0520) !important;
+            color: #ff6ec7 !important;
+            border: 1px solid #ff6ec755 !important;
+            padding: 6px 14px !important;
+            font-size: 0.9rem !important;
+            border-radius: 6px !important;
+            margin-left: auto;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .knot-reader-focus-btn:hover:not(:disabled) {
+            background: linear-gradient(135deg, #3d1040, #2a0a2a) !important;
+            box-shadow: 0 0 12px rgba(255, 110, 199, 0.35);
+            border-color: #ff6ec7 !important;
+        }
+
+        #knot-reader-display {
+            padding: 24px 28px;
+            min-height: 250px;
+            max-height: 70vh;
+            overflow-y: auto;
+            color: #00ffcc;
+            font-family: 'Inter', sans-serif;
+            font-size: 1rem;
+            line-height: 1.75;
+            letter-spacing: 0.01em;
+            background: radial-gradient(ellipse at top left, rgba(0, 255, 204, 0.02) 0%, transparent 60%),
+                #0a0a1a;
+        }
+
+        /* Scrollbar inside the reader */
+        #knot-reader-display::-webkit-scrollbar {
+            width: 14px;
+        }
+
+        #knot-reader-display::-webkit-scrollbar-track {
+            background: #0a0a1a;
+        }
+
+        #knot-reader-display::-webkit-scrollbar-thumb {
+            background: #00ffcc33;
+            border-radius: 4px;
+        }
+
+        #knot-reader-display::-webkit-scrollbar-thumb:hover {
+            background: #00ffcc66;
+        }
+
+        /* Markdown rendered content styling */
+        #knot-reader-display h1,
+        #knot-reader-display h2,
+        #knot-reader-display h3,
+        #knot-reader-display h4,
+        #knot-reader-display h5,
+        #knot-reader-display h6 {
+            color: #ff6ec7;
+            text-shadow: 0 0 12px rgba(255, 110, 199, 0.3);
+            margin: 1.2em 0 0.5em 0;
+            font-weight: 700;
+        }
+
+        #knot-reader-display h1 {
+            font-size: 1.8rem;
+            border-bottom: 1px solid #ff6ec733;
+            padding-bottom: 8px;
+        }
+
+        #knot-reader-display h2 {
+            font-size: 1.45rem;
+        }
+
+        #knot-reader-display h3 {
+            font-size: 1.2rem;
+        }
+
+        #knot-reader-display h4 {
+            font-size: 1.05rem;
+            color: #ff99d6;
+        }
+
+        #knot-reader-display p {
+            margin: 0.6em 0;
+        }
+
+        #knot-reader-display strong {
+            color: #33ffd6;
+            font-weight: 700;
+        }
+
+        #knot-reader-display em {
+            color: #80ffe6;
+            font-style: italic;
+        }
+
+        #knot-reader-display ul,
+        #knot-reader-display ol {
+            padding-left: 1.5em;
+            margin: 0.5em 0;
+        }
+
+        #knot-reader-display li {
+            margin: 0.3em 0;
+        }
+
+        #knot-reader-display li::marker {
+            color: #ff6ec7;
+        }
+
+        #knot-reader-display code {
+            background: #1a1a3e;
+            color: #ffef5c;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-family: 'Consolas', 'Courier New', monospace;
+            font-size: 0.9em;
+        }
+
+        #knot-reader-display pre {
+            background: #0d0d2b;
+            border: 1px solid #00ffcc22;
+            border-radius: 8px;
+            padding: 16px;
+            overflow-x: auto;
+            margin: 1em 0;
+        }
+
+        #knot-reader-display pre code {
+            background: none;
+            padding: 0;
+            color: #ffef5c;
+            font-size: 0.88rem;
+        }
+
+        #knot-reader-display blockquote {
+            border-left: 3px solid #ff6ec7;
+            padding-left: 16px;
+            margin: 1em 0;
+            color: #b0f0e0;
+            font-style: italic;
+        }
+
+        #knot-reader-display a {
+            color: #00ccff;
+            text-decoration: underline;
+        }
+
+        #knot-reader-display hr {
+            border: none;
+            border-top: 1px solid #00ffcc33;
+            margin: 1.5em 0;
+        }
+
+        #knot-reader-display table {
+            border-collapse: collapse;
+            width: 100%;
+            margin: 1em 0;
+        }
+
+        #knot-reader-display th,
+        #knot-reader-display td {
+            border: 1px solid #00ffcc33;
+            padding: 8px 12px;
+            text-align: left;
+        }
+
+        #knot-reader-display th {
+            background: #1a1a3e;
+            color: #ff6ec7;
+        }
+
+        /* Knot metadata tags */
+        .knot-reader-meta {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+            margin-bottom: 16px;
+            padding-bottom: 12px;
+            border-bottom: 1px solid #00ffcc18;
+        }
+
+        .knot-reader-meta-tag {
+            background: #1a1a3e;
+            color: #80ffe6;
+            padding: 3px 10px;
+            border-radius: 12px;
+            font-size: 0.78rem;
+            font-family: 'Inter', monospace;
+            border: 1px solid #00ffcc22;
+        }
+
+        .knot-reader-meta-tag.status-COMPLETED {
+            color: #00ff88;
+            border-color: #00ff8844;
+        }
+
+        .knot-reader-meta-tag.status-PENDING {
+            color: #ffaa00;
+            border-color: #ffaa0044;
+        }
+
+        .knot-reader-meta-tag.status-RUNNING {
+            color: #00ccff;
+            border-color: #00ccff44;
+            animation: neonPulse 1.5s ease-in-out infinite;
+        }
+
+        @keyframes neonPulse {
+
+            0%,
+            100% {
+                box-shadow: 0 0 4px rgba(0, 204, 255, 0.2);
+            }
+
+            50% {
+                box-shadow: 0 0 12px rgba(0, 204, 255, 0.5);
+            }
+        }
+
+        /* Prompt details toggle */
+        .knot-reader-prompt-details {
+            margin-bottom: 16px;
+        }
+
+        .knot-reader-prompt-summary {
+            cursor: pointer;
+            color: #ffaa00;
+            font-size: 0.85rem;
+            font-weight: 600;
+            padding: 6px 12px !important;
+            background: #1a1a2e !important;
+            border-radius: 6px !important;
+            border: 1px solid #ffaa0033;
+        }
+
+        .knot-reader-prompt-summary:hover {
+            background: #252540 !important;
+        }
+
+        .knot-reader-prompt-body {
+            background: #0d0d22;
+            color: #ccaa66;
+            padding: 12px 16px;
+            margin-top: 6px;
+            border-radius: 6px;
+            font-family: 'Consolas', monospace;
+            font-size: 0.85rem;
+            white-space: pre-wrap;
+            word-break: break-word;
+            max-height: 200px;
+            overflow-y: auto;
+            border: 1px solid #ffaa0018;
+        }
+
+        .knot-reader-empty {
+            color: #555580;
+            text-align: center;
+            font-style: italic;
+            padding: 40px 20px;
+            font-size: 1.05rem;
+        }
+
+        .knot-reader-fallback {
+            white-space: pre-wrap;
+            word-break: break-word;
+            color: #00ffcc;
+        }
+
+        /* Neon glow on the details summary */
+        .knot-reader-summary {
+            background: linear-gradient(135deg, #0d0d2b, #0a0a1a) !important;
+            color: #00ffcc !important;
+            border: 1px solid #00ffcc44 !important;
+            text-shadow: 0 0 10px rgba(0, 255, 204, 0.3);
+        }
+
+        .knot-reader-summary:hover {
+            background: linear-gradient(135deg, #151540, #0d0d2b) !important;
+            box-shadow: 0 0 15px rgba(0, 255, 204, 0.2);
+        }
+    </style>
+</head>
+
+<body class="min-h-screen">
+
+    <div class="container mx-auto p-4 md:p-8">
+        <header class="text-center mb-12">
+            <h1 class="font-bold text-blue-400">C234 Ollama Interface</h1>
+            <p class="text-slate-400 text-lg">Quipu Workflow Engine</p>
+        </header>
+        <!-- Visual Canvas System -->
+        <section>
+            <details>
+                <summary class="text-slate-100">Visual Workflow Canvas</summary>
+                <div class="details-content space-y-4">
+                    <!-- Canvas Container -->
+                    <div id="canvas-wrapper"
+                        class="w-full h-[600px] bg-slate-900 border border-slate-700 rounded overflow-hidden relative">
+                        <canvas id="workflow-canvas"></canvas>
+                        <div
+                            class="absolute top-2 left-2 bg-slate-800 p-2 rounded text-xs text-slate-400 pointer-events-none">
+                            Pan: Drag | Zoom: Scroll
+                        </div>
+                    </div>
+                    <button onclick="renderCanvasUpdate()">Refresh Canvas</button>
+                </div>
+            </details>
+        </section>
+
+        <!-- NEW: ArchNode Visual Architecture System -->
+        <section>
+            <details>
+                <summary class="text-slate-100">Vis-Architect Dependency Graph</summary>
+                <div class="details-content space-y-4">
+                    <div id="vis-controls" class="p-4 bg-slate-800 text-sm flex gap-2 overflow-x-auto">
+                        <button id="btn-architect-re-layout"
+                            class="px-3 py-1 bg-slate-700 hover:bg-slate-600 rounded whitespace-nowrap">Auto-Layout</button>
+                        <button id="btn-architect-fit"
+                            class="px-3 py-1 bg-slate-700 hover:bg-slate-600 rounded whitespace-nowrap">Fit
+                            View</button>
+                    </div>
+                    <!-- Vis.js Container -->
+                    <div id="viz-architect"
+                        class="w-full h-[600px] bg-slate-900 border border-slate-700 rounded overflow-hidden relative"
+                        style="height: 60vh; border: 1px solid #4ecdc4; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.3);">
+                    </div>
+
+                    <!-- Bottom Action Dock for manual graph manipulation -->
+                    <div id="action-dock" class="w-full mt-4 p-4 border border-slate-700 rounded text-center"
+                        style="background: rgba(30, 30, 30, 0.95);">
+                        <div id="dock-title" style="font-size: 1.2rem; font-weight: bold; color: #4ecdc4;">NO SELECTION
+                        </div>
+                        <div id="dock-sub" style="font-size: 0.8rem; color: #aaa; margin-bottom: 10px;">Double-click
+                            empty space or select node</div>
+
+                        <div class="btn-group flex gap-2 justify-center">
+                            <button class="dock-btn bg-slate-600 px-3 py-1 rounded"
+                                onclick="CoSy.triggerAction('add_parent')" disabled>+ PARENT (Dependency)</button>
+                            <button class="dock-btn bg-slate-600 px-3 py-1 rounded"
+                                onclick="CoSy.triggerAction('add_child')" disabled>+ CHILD (Derivative)</button>
+                            <button class="dock-btn bg-slate-600 px-3 py-1 rounded" onclick="CoSy.triggerAction('edit')"
+                                disabled>EDIT NODE</button>
+                            <button class="dock-btn text-red-400 bg-slate-700 border-red-500 px-3 py-1 rounded"
+                                onclick="CoSy.deleteNode()" disabled>DESTROY NODE</button>
+                        </div>
+                    </div>
+                </div>
+            </details>
+        </section>
+        <!-- ... existing HTML ... -->
+        <!-- Add script at bottom -->
+        <!-- Main two-column layout -->
+        <div class="flex flex-col lg:flex-row gap-8">
+
+            <!-- ============================================= -->
+            <!-- ==         MAIN CONTENT (CENTER)           == -->
+            <!-- ============================================= -->
+            <main class="flex-1 flex flex-col gap-8" style="min-width: 0;">
+
+                <!-- Quipu Keychain System -->
+                <section>
+                    <details open>
+                        <summary class="text-slate-100">Quipu Keychain System</summary>
+                        <div class="details-content space-y-4">
+                            <div id="decomp-recomp-console"></div>
+                            <div id="keychain-container" class="overflow-x-auto"></div>
+                            <div id="quipu-save-load-controls" class="space-y-3 pt-4">
+                                <h3 class="text-lg font-semibold">Save/Load Keychain</h3>
+                                <textarea id="quipu-save-load-area" rows="8"
+                                    class="w-full font-mono text-sm"></textarea>
+                                <div class="flex gap-4">
+                                    <button onclick="saveKeychain()">Save to Textarea</button>
+                                    <button onclick="loadKeychain()">Load from Textarea</button>
+                                    <button onclick="downloadKeychain()" style="background-color: #059669 !important;">⬇
+                                        Download Keychain</button>
+                                </div>
+                            </div>
+                        </div>
+                    </details>
+                </section>
+
+                <!-- Knot Reader — Neon Carousel -->
+                <section>
+                    <details>
+                        <summary class="text-slate-100 knot-reader-summary">⚡ Knot Reader</summary>
+                        <div class="knot-reader-section">
+                            <div class="knot-reader-controls">
+                                <select id="knot-reader-quipu-select" onchange="knotReaderSelectQuipu(this)">
+                                    <option value="">Select a Quipu…</option>
+                                </select>
+                                <button id="knot-reader-prev" class="knot-reader-nav-btn" onclick="knotReaderPrev()"
+                                    disabled>◀</button>
+                                <span id="knot-reader-position" class="knot-reader-position">—</span>
+                                <button id="knot-reader-next" class="knot-reader-nav-btn" onclick="knotReaderNext()"
+                                    disabled>▶</button>
+                                <button id="knot-reader-refresh" class="knot-reader-nav-btn"
+                                    onclick="renderKnotReader()" title="Refresh Quipu list">↻</button>
+                                <button id="knot-reader-focus-btn" class="knot-reader-focus-btn"
+                                    onclick="knotReaderSwitchFocus()" disabled>⬡ Switch Focus</button>
+                            </div>
+                            <div id="knot-reader-display">
+                                <p class="knot-reader-empty">Select a Quipu to browse its knots.</p>
+                            </div>
+                        </div>
+                    </details>
+                </section>
+
+                <!-- QDL — Quipu Declaration Language -->
+                <section>
+                    <details>
+                        <summary class="text-slate-100">QDL — Quipu Declaration Language</summary>
+                        <div class="details-content space-y-4">
+                            <div>
+                                <h3 class="text-lg font-semibold mb-2">Live QDL (auto-updated)</h3>
+                                <textarea id="qdl-live-output" rows="12" readonly
+                                    class="w-full font-mono text-sm bg-slate-900" style="color: #93c5fd;"></textarea>
+                            </div>
+                            <div>
+                                <h3 class="text-lg font-semibold mb-2">QDL Input</h3>
+                                <textarea id="qdl-input" rows="10" class="w-full font-mono text-sm"
+                                    placeholder="Paste QDL text here..."></textarea>
+                                <button onclick="applyQDL()" class="mt-2">Apply QDL</button>
+                            </div>
+                        </div>
+                    </details>
+                </section>
+
+                <!-- Legacy Scenario System -->
+                <section>
+                    <details>
+                        <summary class="text-slate-100">Legacy Scenario System</summary>
+                        <div class="details-content space-y-6">
+                            <div>
+                                <h3 class="text-lg font-semibold mb-2">Scenario Tracks</h3>
+                                <div class="overflow-x-auto" style="max-width: 100%;">
+                                    <table class="scenario-table">
+                                        <tbody id="dynamicTableTracksContainer"></tbody>
+                                    </table>
+                                </div>
+                            </div>
+                            <div>
+                                <h3 class="text-lg font-semibold mb-2">Coalesced Execution Plan</h3>
+                                <div class="overflow-x-auto" style="max-width: 100%;">
+                                    <table class="scenario-table">
+                                        <tbody id="coalescedExecutionRowContainer"></tbody>
+                                    </table>
+                                </div>
+                            </div>
+                            <div>
+                                <button id="renderbtn">Render Legacy Scenario</button>
+                                <button id="seetex">See Scenario JSON</button>
+                                <button id="emitex">Load Scenario JSON</button>
+                                <textarea id="scenetext" rows="5"></textarea>
+                            </div>
+                        </div>
+                    </details>
+                </section>
+
+            </main>
+
+            <!-- ============================================= -->
+            <!-- ==            SIDEBAR (RIGHT)              == -->
+            <!-- ============================================= -->
+            <aside class="w-full lg:w-1/3 xl:w-1/4 flex flex-col gap-6">
+
+                <!-- Status Display -->
+                <div id="status" class="bg-slate-800 p-4 rounded-lg text-base text-center font-mono">Ready</div>
+
+                <!-- Model Controls -->
+                <div class="bg-slate-800 p-4 rounded-lg space-y-4">
+                    <h2 class="text-lg font-semibold border-b border-slate-700 pb-2">Model Controls</h2>
+                    <div>
+                        <label for="modelSel" class="block font-medium mb-1">Model Selection</label>
+                        <select id="modelSel"></select>
+                    </div>
+                    <div>
+                        <label for="numCtxSlider" class="block font-medium">Context Size (num_ctx)</label>
+                        <div class="flex items-center gap-3">
+                            <input type="range" id="numCtxSlider" min="512" max="8192" value="4096" step="256"
+                                class="w-full">
+                            <span id="numCtxValue"
+                                class="font-mono text-base bg-slate-700 px-3 py-1 rounded">4096</span>
+                        </div>
+                    </div>
+                    <div>
+                        <label for="tempslider" class="block font-medium">Temperature</label>
+                        <div class="flex items-center gap-3">
+                            <input type="range" id="tempslider" min="0" max="1" value="0.34" step="0.01" class="w-full">
+                            <span id="tempValue" class="font-mono text-base bg-slate-700 px-3 py-1 rounded">0.34</span>
+                        </div>
+                    </div>
+                    <div>
+                        <label for="topkslider" class="block font-medium">Top K</label>
+                        <div class="flex items-center gap-3">
+                            <input type="range" id="topkslider" min="1" max="20" value="3" step="1" class="w-full">
+                            <span id="topkValue" class="font-mono text-base bg-slate-700 px-3 py-1 rounded">3</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Main Chat UI -->
+                <div class="bg-slate-800 p-4 rounded-lg space-y-4">
+                    <h2 class="text-lg font-semibold border-b border-slate-700 pb-2">Quick Chat</h2>
+                    <textarea id="prompt" rows="5" placeholder="Enter a quick prompt here..."></textarea>
+                    <button id="send" class="w-full">Send Prompt</button>
+                    <div id="response"
+                        class="bg-slate-900 p-3 rounded-md min-h-[60px] text-base font-mono whitespace-pre-wrap"></div>
+                    <div id="messageHistoryStack"
+                        class="max-h-96 overflow-y-auto space-y-3 p-2 border border-slate-700 rounded-md"></div>
+                    <button id="saveHistoryButton">Save Quick Chat History</button>
+                </div>
+
+                <!-- Embeddings / RAG Tool -->
+                <details>
+                    <summary>Embeddings (RAG)</summary>
+                    <div class="details-content bg-slate-800 p-4 rounded-b-lg space-y-4">
+                        <h3 class="font-semibold">Create Embedding Chunk</h3>
+                        <label for="embedding_model" class="block font-medium mb-1">Embedding Model:</label>
+                        <select id="embedding_model">
+                            <option value="nomic-embed-text">nomic-embed-text</option>
+                            <option value="mxbai-embed-large">mxbai-embed-large</option>
+                            <option value="all-minilm">all-minilm</option>
+                            <option value="snowflake-arctic-embed">snowflake-arctic-embed</option>
+                        </select>
+
+                        <label for="embedding_text" class="block font-medium mb-1">Text to Embed:</label>
+                        <textarea id="embedding_text" rows="3" placeholder="Enter text chunk here..."></textarea>
+
+                        <button id="generate_embedding_btn">Generate Embedding</button>
+
+                        <label for="embedding_result" class="block font-medium mb-1 mt-4">Result (JSON Chunk):</label>
+                        <textarea id="embedding_result" rows="5" readonly
+                            class="font-mono text-sm bg-slate-900"></textarea>
+                    </div>
+                </details>
+                <!-- Tooling Section -->
+                <details>
+                    <summary>Tooling</summary>
+                    <div class="details-content bg-slate-800 p-4 rounded-b-lg space-y-4">
+                        <h3 class="font-semibold">Define New Tool</h3>
+                        <input type="text" id="function_name" placeholder="Function Name">
+                        <textarea id="function_description" rows="2" placeholder="Function Description"></textarea>
+                        <select id="number_parameters"></select>
+                        <div id="parameters_area"></div>
+                        <textarea id="function_code" rows="5" placeholder="JavaScript function body..."></textarea>
+                        <button id="add_function">Add/Update Tool</button>
+                        <div id="defined_functions_list">
+                            <ul></ul>
+                        </div>
+                        <hr class="border-slate-700">
+                        <h3 class="font-semibold">Import/Export Tools</h3>
+                        <textarea id="tools_json_area" rows="6"></textarea>
+                        <div class="flex gap-4">
+                            <button id="export_tools_button">Export</button>
+                            <button id="import_tools_button">Import</button>
+                        </div>
+                        <div id="import_export_status"></div>
+                    </div>
+                </details>
+
+                <!-- Legacy Conversation History Log -->
+                <details>
+                    <summary>Legacy History</summary>
+                    <div class="details-content max-h-96 overflow-y-auto">
+                        <button id="savePresentScenario">Save Present Scenario</button>
+                        <table class="w-full text-sm">
+                            <tbody id="conversationHistoryLogContainer"></tbody>
+                        </table>
+                    </div>
+                </details>
+
+                <div id="tool_output_area"></div>
+                <div id="contextSizeInfo"></div>
+                <div id="tokendisp"></div>
+
+            </aside>
+
+        </div>
+    </div>
+    <script type="module" src="./main.js"></script>
+    <!-- ============================================= -->
+    <!-- ==              SCRIPT LOADING             == -->
+    <!-- ============================================= -->
+    <!-- Legacy System Scripts -->
+    <legacy src="/data-models.js"></legacy>
+    <legacy src="/manager.js"></legacy>
+    <legacy src="/core-services.js"></legacy>
+    <legacy src="/main-chat-ui.js"></legacy>
+    <legacy src="/dynamic-table-renderer.js"></legacy>
+    <legacy src="/execution-suite-single-pass.js"></legacy>
+    <legacy src="/execution-suite-two-pass.js"></legacy>
+    <legacy src="/tools-ui.js"></legacy>
+
+    <!-- New Quipu System legacys -->
+    <legacy src="/quipu-data-models.js"></legacy>
+    <legacy src="/quipu-manager.js"></legacy>
+    <legacy src="/quipu-renderer.js"></legacy>
+    <legacy src="/execution-suite-quipu.js"></legacy>
+    <legacy src="/decomp-recomp-engine.js"></legacy>
+    <legacy src="/qdl-engine.js"></legacy>
+    <legacy src="/RAG.js"></legacy>
+    <legacy src="/CANVAS_Visualizer.js"></legacy>
+    <legacy src="/console_logic.js"></legacy>
+    <legacy src="/TemporalEngine.js"></legacy>
+    <legacy src="/arch-core.js"></legacy>
+    <legacy src="/knot-reader.js"></legacy>
+
+    <slegacy>
+        // Initial render of the Quipu system on page load
+        document.addEventListener('DOMContentLoaded', () => {
+        if (window.ActiveKeychain && typeof window.ActiveKeychain.yieldElement === 'function') {
+        const keychainContainer = document.getElementById('keychain-container');
+        if (keychainContainer) {
+        window.ActiveKeychain.yieldElement(keychainContainer.id);
+        }
+        }
+        // Initial QDL emission
+        if (typeof qdlShadowUpdate === 'function') qdlShadowUpdate();
+        // fetchAndPopulateModels();
+        });
+    </slegacy>
+    <slegacy>
+
+        populateModelOptions().then(() => {
+        if (typeof renderDecompRecompConsole === 'function') renderDecompRecompConsole();
+        if (typeof renderKnotReader === 'function') renderKnotReader();
+        });
+        initCanvasSystem();
+    </slegacy>
+    <!-- Global Floating Status UI -->
+    <div id="statusDiv"
+        class="fixed bottom-6 right-6 bg-slate-800 text-green-400 p-4 rounded-lg shadow-2xl border border-slate-600 z-50 text-sm font-mono max-w-md hidden transition-opacity duration-300 opacity-0">
+    </div>
+</body>
+
+</html>

@@ -1,0 +1,443 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Wish Machine - Quipu Scenario Manager</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="/Tone.js"></script>
+    <script type="text/javascript" src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"></script>
+    <!-- Marked.js for markdown rendering in Knot Reader -->
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <style>
+        :root {
+            --ebony: #050505;
+            --gold-24kt: #FFD700;
+            --ruby: #9b111e;
+            --sapphire: #0f52ba;
+            --emerald: #50c878;
+            --topaz: #ffc87c;
+            --table-scale: 1.0;
+        }
+
+        body {
+            background-color: var(--ebony);
+            color: #f8fafc;
+            font-family: 'Inter', sans-serif;
+            margin: 0;
+            padding: 0;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* Custom scrollbar matching UXtool */
+        ::-webkit-scrollbar {
+            width: 10px;
+            height: 10px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: #111;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: #882e2e;
+            border: 1px solid var(--gold-24kt);
+            border-radius: 5px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: #444;
+        }
+
+        .scenario-table {
+            width: 100%;
+            border-collapse: separate;
+            border-spacing: 0 1rem;
+            transform-origin: top left;
+            transition: transform 0.2s ease-out;
+        }
+
+        .table-zoom-wrapper {
+            overflow-x: auto;
+            overflow-y: auto;
+            max-width: 100%;
+            max-height: 80vh;
+            border: 1px solid #222;
+            background: #000;
+            position: relative;
+        }
+
+        .scenario-table th,
+        .scenario-table td {
+            border: 1px solid #222;
+            padding: 1rem;
+            vertical-align: top;
+            background-color: #0f172a;
+        }
+
+
+        .strand-header,
+        .row-control-console {
+            border: 1px solid var(--gold-24kt) !important;
+            box-shadow: inset 0 0 10px rgba(255, 215, 0, 0.1);
+        }
+
+        .knot-container,
+        .cell-content {
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+        }
+
+        input[type="text"],
+        input[type="number"],
+        textarea,
+        select {
+            background-color: var(--ebony) !important;
+            border: 1px solid #333 !important;
+            border-radius: 0.375rem;
+            font-size: 1rem;
+            padding: 0.75rem 1rem;
+            width: 100%;
+            color: var(--gold-24kt) !important;
+            margin-top: 5px;
+            box-shadow: inset 0 0 5px rgba(255, 215, 0, 0.05);
+        }
+
+        textarea {
+            font-family: 'Courier New', Courier, monospace;
+            border-color: #444 !important;
+        }
+
+
+        button {
+            background-color: #2563eb !important;
+            color: white !important;
+            padding: 0.75rem 1.25rem !important;
+            font-size: 0.85rem !important;
+            border-radius: 0.375rem !important;
+            font-weight: 500 !important;
+            transition: all 0.2s;
+            border: 1px solid var(--gold-24kt) !important;
+            cursor: pointer;
+            margin-right: 5px;
+            margin-top: 5px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        button:hover {
+            background-color: var(--gold-24kt) !important;
+            color: black !important;
+            box-shadow: 0 0 15px var(--gold-24kt);
+        }
+
+        button:disabled {
+            background-color: #2e236e !important;
+            color: #444 !important;
+            border-color: #333 !important;
+            cursor: not-allowed;
+            box-shadow: none;
+        }
+
+        /* Jewel Classes */
+        .jewel-ruby {
+            background-color: var(--ruby) !important;
+            border-color: #ff4d4d !important;
+            box-shadow: 0 0 10px rgba(155, 17, 30, 0.5);
+        }
+
+        .jewel-sapphire {
+            background-color: var(--sapphire) !important;
+            border-color: #4d94ff !important;
+            box-shadow: 0 0 10px rgba(15, 82, 186, 0.5);
+        }
+
+        .jewel-emerald {
+            background-color: var(--emerald) !important;
+            border-color: #99ffbb !important;
+            box-shadow: 0 0 10px rgba(80, 200, 120, 0.5);
+        }
+
+        .jewel-topaz {
+            background-color: var(--topaz) !important;
+            border-color: #fff !important;
+            color: black !important;
+            box-shadow: 0 0 10px rgba(255, 200, 124, 0.5);
+        }
+
+        .zoom-controls {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            background: #111;
+            padding: 5px 15px;
+            border-radius: 20px;
+            border: 1px solid var(--gold-24kt);
+        }
+
+        @keyframes shimmer {
+            0% {
+                box-shadow: inset 0 0 5px rgba(255, 215, 0, 0.1);
+            }
+
+            50% {
+                box-shadow: inset 0 0 20px rgba(255, 215, 0, 0.4);
+            }
+
+            100% {
+                box-shadow: inset 0 0 5px rgba(255, 215, 0, 0.1);
+            }
+        }
+
+        .shimmering {
+            animation: shimmer 3s infinite ease-in-out;
+        }
+
+
+
+        .compact-mode td,
+        .compact-mode th,
+        .compact td,
+        .compact th {
+            padding: 0.25rem !important;
+            font-size: 0.75rem !important;
+        }
+
+        .compact-mode .knot-container,
+        .compact .knot-container {
+            gap: 0.25rem !important;
+        }
+
+        /* Auto-hide bulky elements in compact mode across re-renders */
+        .compact textarea,
+        .compact .knot-config-container,
+        .compact .cell-controls,
+        .compact .execution-controls,
+        .compact .choice-radios,
+        .compact .parallel-branches {
+            display: none !important;
+        }
+    </style>
+</head>
+
+<body class="min-h-screen p-4 md:p-8">
+
+    <header class="text-center mb-8">
+        <h1 class="font-bold text-blue-400 text-3xl mb-2">Wish Machine</h1>
+        <p class="text-slate-400 text-lg">Seven_Wish Dynamic Scenario Manager</p>
+    </header>
+
+    <div class="flex flex-col xl:flex-row gap-8">
+
+        <!-- Main Table Area -->
+        <main class="flex-1 space-y-8" style="min-width: 0;">
+            <!-- Unified Pipeline Console -->
+            <section id="sweep-console" class="bg-slate-900 rounded-lg p-6 shadow-2xl"
+                style="border: 2px solid var(--gold-24kt); box-shadow: 0 0 25px rgba(155, 17, 30, 0.3), 0 0 60px rgba(255, 215, 0, 0.08); background: linear-gradient(160deg, #0a0a0a 0%, #1a0f0f 40%, #0f0a1a 100%);">
+
+                <!-- Row 1: Topic Input -->
+                <div class="flex flex-col md:flex-row items-end gap-4 mb-5">
+                    <div class="flex-1 w-full">
+                        <label for="topic_name" class="block text-sm font-medium mb-2"
+                            style="color: var(--gold-24kt); letter-spacing: 1px; text-transform: uppercase;">System Topic to Decompose:</label>
+                        <input type="text" id="topic_name"
+                            placeholder="e.g. Recursive Neural Network, Distributed Database, Aerospace Avionics..."
+                            style="width: 100%; padding: 12px; background: #050505; border: 1px solid #444; color: var(--gold-24kt); border-radius: 4px; font-family: 'Space Mono', monospace;">
+                    </div>
+                    <div class="flex items-center gap-3" style="flex-shrink: 0;">
+                        <label for="decompLimit" style="color: var(--gold-24kt); font-size: 0.8rem; white-space: nowrap;">MAX WAVES:</label>
+                        <input type="number" id="decompLimit" value="20" min="1" max="100"
+                            style="width: 60px; height: 38px; padding: 2px 6px; margin-top: 0; background-color: var(--ebony) !important; color: var(--gold-24kt) !important; border: 1px solid #444 !important;">
+                        <label for="numberWaves" style="color: var(--gold-24kt); font-size: 0.8rem; white-space: nowrap;">WAVES:</label>
+                        <input type="number" id="numberWaves" value="3" min="1" max="20"
+                            style="width: 60px; height: 38px; padding: 2px 6px; background-color: var(--ebony) !important; color: var(--gold-24kt) !important; border: 1px solid #444 !important; text-align: center;">
+                    </div>
+                </div>
+
+                <!-- Row 2: Action Buttons (flex-wrap to prevent overflow) -->
+                <div class="flex flex-wrap items-start gap-3 mb-5" style="border-top: 1px solid rgba(255,215,0,0.15); padding-top: 14px;">
+
+                    <div class="flex flex-col items-center gap-1">
+                        <button id="sweepDecomposeBtn"
+                            style="border: 2px solid var(--gold-24kt); min-width: 170px; text-transform: uppercase; letter-spacing: 1px; background: linear-gradient(135deg, #9b111e 0%, #4a0404 100%); font-size: 0.75rem !important; padding: 10px 14px !important;"
+                            onclick="import('./services/tableExecutionSuite.js').then(m => m.handleNewDecompositionSweep())">
+                            1. Initialize Sweep
+                        </button>
+                        <span style="font-size: 0.65rem; color: #666; text-transform: uppercase;">Fresh start</span>
+                    </div>
+
+                    <div class="flex flex-col items-center gap-1">
+                        <button id="executeNextWaveBtn"
+                            style="border: 2px solid var(--sapphire, #0f52ba); min-width: 170px; text-transform: uppercase; letter-spacing: 1px; background: linear-gradient(135deg, #0f52ba 0%, #082d66 100%); font-size: 0.75rem !important; padding: 10px 14px !important;"
+                            onclick="import('./services/tableExecutionSuite.js').then(m => m.executeNextWave())">
+                            2. Next Wave
+                        </button>
+                        <span style="font-size: 0.65rem; color: #666; text-transform: uppercase;">Step decomposition</span>
+                    </div>
+
+                    <div class="flex flex-col items-center gap-1">
+                        <button id="executeLastWaveBtn"
+                            style="border: 2px solid #a5b4fc; min-width: 170px; text-transform: uppercase; letter-spacing: 1px; background: linear-gradient(135deg, #4338ca 0%, #312e81 100%); font-size: 0.75rem !important; padding: 10px 14px !important;"
+                            onclick="import('./services/tableExecutionSuite.js').then(m => m.executeLastWave())">
+                            2.5 Last Wave
+                        </button>
+                        <span style="font-size: 0.65rem; color: #666; text-transform: uppercase;">Final leaves</span>
+                    </div>
+
+                    <div class="flex flex-col items-center gap-1">
+                        <button id="buildRecompBtn"
+                            style="border: 2px solid #8b5cf6; min-width: 170px; text-transform: uppercase; letter-spacing: 1px; background: linear-gradient(135deg, #8b5cf6 0%, #4c1d95 100%); font-size: 0.75rem !important; padding: 10px 14px !important;"
+                            onclick="import('./services/tableExecutionSuite.js').then(m => m.handleBuildRecomposition())">
+                            3. Build Recomp
+                        </button>
+                        <span style="font-size: 0.65rem; color: #666; text-transform: uppercase;">Synthesis tree</span>
+                    </div>
+
+                    <div class="flex flex-col items-center gap-1">
+                        <button id="autoRecomposeBtn"
+                            style="border: 2px solid #10b981; min-width: 170px; text-transform: uppercase; letter-spacing: 1px; background: linear-gradient(135deg, #10b981 0%, #064e3b 100%); font-size: 0.75rem !important; padding: 10px 14px !important;"
+                            onclick="import('./services/tableExecutionSuite.js').then(m => m.autoRecomposeAll())">
+                            4. Auto-Recompose
+                        </button>
+                        <span style="font-size: 0.65rem; color: #666; text-transform: uppercase;">Execute synthesis</span>
+                    </div>
+
+                    <div style="border-left: 2px solid rgba(255,215,0,0.3); height: 50px; margin: 0 4px; align-self: center;"></div>
+
+                    <div class="flex flex-col items-center gap-1">
+                        <button id="fullPipelineBtn"
+                            style="border: 2px solid var(--gold-24kt); min-width: 190px; text-transform: uppercase; letter-spacing: 2px; background: linear-gradient(135deg, #b8860b 0%, #5a3e00 100%); font-size: 0.8rem !important; padding: 12px 16px !important; font-weight: bold !important;"
+                            onclick="import('./services/tableExecutionSuite.js').then(m => m.runFullPipeline())">
+                            ⚡ Full Pipeline
+                        </button>
+                        <span style="font-size: 0.65rem; color: #888; text-transform: uppercase;">Sweep → N Waves → Recomp</span>
+                    </div>
+                </div>
+
+                <!-- Row 3: Pipeline Model Selectors (the 5 essential selects) -->
+                <div id="decomp-recomp-console"></div>
+
+            </section>
+
+            <!-- Wish Summary Section -->
+            <section id="wish-summary-console" class="bg-slate-900 border border-gold-24kt rounded-lg p-6 shadow-2xl mt-8"
+                style="border-width: 2px; border-color: #0f52ba; box-shadow: 0 0 20px rgba(15, 82, 186, 0.4); display: none;">
+                <h2 class="text-xl font-bold mb-4" style="color: var(--sapphire, #0f52ba); text-transform: uppercase;">Seven_Wish Summary</h2>
+                <div id="wish-summary-container" class="overflow-x-auto w-full flex justify-center py-2" style="scrollbar-color: #0f52ba #0a0a0a; scrollbar-width: thin;">
+                    <!-- Wish_Summary_Cell goes here -->
+                </div>
+            </section>
+
+            <section class="bg-slate-800 border border-slate-700 rounded-lg p-6 mt-8">
+                <div class="flex justify-between items-center mb-4 border-b border-gray-800 pb-4">
+                    <h2 class="text-xl font-bold" style="color: var(--gold-24kt);">Scenario Tracks (Decomposition)</h2>
+                    <div class="flex items-center gap-4">
+                        <div class="zoom-controls">
+                            <label for="tableZoom" style="color: var(--gold-24kt); font-size: 0.8rem;">ZOOM:</label>
+                            <input type="range" id="tableZoom" min="0.1" max="1.5" step="0.05" value="1.0"
+                                oninput="document.getElementById('main-scenario-table').style.transform = `scale(${this.value})`; document.getElementById('zoomVal').textContent = this.value; document.documentElement.style.setProperty('--table-scale', this.value);">
+                            <span id="zoomVal"
+                                style="color: var(--gold-24kt); font-size: 0.8rem; min-width: 30px;">1.0</span>
+                        </div>
+                        <button id="switchPlanBtn" title="Switch between Decomposition and Recomposition views"
+                            onclick="import('./renderers/tableRenderer.js').then(m => m.handleSwitchPlanView())">Switch
+                            to Recomposition</button>
+                        <button id="compactbtn" title="Toggle Compact Mode to reduce DOM strain"
+                            onclick="import('./renderers/tableRenderer.js').then(m => m.toggleCompactMode())">Compact
+                            Mode</button>
+                        <button id="autoDecomposeBtn" title="Execute full automated decomposition across all levels"
+                            onclick="import('./services/tableExecutionSuite.js').then(m => m.handleFullDecomposition())">Auto-Decompose
+                            All</button>
+                        <button id="renderbtn" title="Rebuild visual layout from state">Render Visuals</button>
+
+                    </div>
+                </div>
+
+                <div class="table-zoom-wrapper">
+                    <table class="scenario-table" id="main-scenario-table">
+                        <tbody id="dynamicTableTracksContainer"></tbody>
+                    </table>
+                </div>
+
+            </section>
+
+            <section class="bg-slate-900 border border-gray-800 rounded-lg p-6">
+                <h2 class="text-xl font-bold border-b border-gray-800 pb-4 mb-4" style="color: var(--gold-24kt);">
+                    Coalesced Execution Plan</h2>
+                <div class="overflow-x-auto pb-4" style="max-width: 100%;">
+                    <table class="scenario-table">
+                        <tbody id="coalescedExecutionRowContainer"></tbody>
+                    </table>
+                </div>
+            </section>
+
+        </main>
+
+        <!-- Sidebar Tools -->
+        <aside class="w-full xl:w-1/4 space-y-6">
+
+            <div id="status"
+                class="bg-slate-800 p-4 rounded-lg text-base text-center font-mono border border-slate-700">Ready</div>
+
+            <div class="bg-slate-800 border border-slate-700 p-6 rounded-lg space-y-4">
+                <h3 class="text-lg font-bold border-b border-slate-700 pb-2">Wish Declarative Language (WDL)</h3>
+                <textarea id="wdltext" rows="12" class="font-mono text-sm"
+                    placeholder="WISH: &quot;My Project&quot;&#10;  DIAGNOSIS:&#10;    CHOICE: &quot;Path A&quot;&#10;      ROW: &quot;Track 1&quot;&#10;        KNOT:&#10;          PROMPT: &quot;Do work&quot;"></textarea>
+                <div class="flex gap-2">
+                    <button id="loadwdlbtn" class="w-1/2 bg-blue-600 hover:bg-blue-700">Compile WDL</button>
+                    <button id="savewdlbtn" class="w-1/2 bg-emerald-600 hover:bg-emerald-700">Extract WDL</button>
+                </div>
+            </div>
+
+            <div class="bg-slate-800 border border-slate-700 p-6 rounded-lg space-y-4">
+                <h3 class="text-lg font-bold border-b border-slate-700 pb-2">Save/Load Seven_Wish JSON</h3>
+                <textarea id="scenetext" rows="12" class="font-mono text-sm"
+                    placeholder="Paste Seven_Wish JSON here..."></textarea>
+                <div class="flex gap-2">
+                    <button id="emitex" class="w-1/2">Load JSON</button>
+                    <button id="seetex" class="w-1/2 bg-emerald-600 hover:bg-emerald-700">Save JSON</button>
+                </div>
+                <button id="exportNexusBtn" class="w-full bg-purple-600 hover:bg-purple-700 mt-2" style="border-color: #8b5cf6 !important;">Export Temporal Nexus Chart</button>
+            </div>
+
+            <div class="bg-slate-800 border border-slate-700 p-6 rounded-lg space-y-4">
+                <h3 class="text-lg font-bold border-b border-slate-700 pb-2">Bayesian Graph Export</h3>
+                <textarea id="bayesianDumpText" rows="6" class="font-mono text-sm" placeholder="Mermaid Graph String..." readonly></textarea>
+                <div class="flex flex-col gap-2">
+                    <button id="dumpBayesianDepBtn" class="w-full bg-indigo-600 hover:bg-indigo-700">Dump Dependencies Mermaid</button>
+                    <button id="dumpBayesianDptBtn" class="w-full bg-indigo-600 hover:bg-indigo-700">Dump Dependents Mermaid</button>
+                    <button id="distillBayesianBtn" class="w-full bg-amber-600 hover:bg-amber-700 mt-2">✨ Distill Graph Edges (MECE)</button>
+                </div>
+            </div>
+
+            <div class="bg-slate-800 border border-slate-700 p-6 rounded-lg space-y-4">
+                <h3 class="text-lg font-bold border-b border-slate-700 pb-2">Model Params</h3>
+                <div>
+                    <label for="modelSel" class="block font-medium mb-1">Model</label>
+                    <select id="modelSel"></select>
+                </div>
+            </div>
+        </aside>
+
+    </div>
+
+    <!-- System Status Popup -->
+    <div id="statusDiv"
+        class="fixed bottom-6 right-6 bg-slate-800 text-green-400 p-4 rounded-lg shadow-2xl border border-slate-600 z-50 text-sm font-mono max-w-md hidden transition-opacity duration-300 opacity-0">
+    </div>
+
+    <script type="module" src="./main.js"></script>
+
+    <!-- UI Interaction Stubs required to load safely without crushing undefined buttons from main.js -->
+    <div id="viz-architect" style="display:none"></div>
+    <div id="keychain-container" style="display:none"></div>
+    <div id="knot-reader-display" style="display:none"></div>
+
+</body>
+
+</html>

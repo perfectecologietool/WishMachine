@@ -1,0 +1,68 @@
+# Refactoring Four_Component to use KnowledgeNode
+
+## Problem
+In a previous iteration, [ArchNode](file:///c:/Users/user/Documents/WDL_2026March23/models/ArchModels.js#35-92) properties (`dependencies`, `dependents`, metadata) were merged directly into [Four_Component](file:///c:/Users/user/Documents/WDL_2026March23/models/WISH.js#466-519). This violated the separation of concerns: the **WDL Table Graph** (Four_Row, Five_Choice) became tightly coupled with the **Knowledge/Architecture Graph** (ArchNode).
+
+## Solution
+Create `KnowledgeNode` (which extends [ArchNode](file:///c:/Users/user/Documents/WDL_2026March23/models/ArchModels.js#35-92)) and make it a **member variable** of [Four_Component](file:///c:/Users/user/Documents/WDL_2026March23/models/WISH.js#466-519). This unifies the Decomposition and Recomposition nodes while keeping the knowledge filing system separate from the UI routing system.
+
+---
+
+## 1. Create `KnowledgeNode`
+
+Create `models/KnowledgeNode.js`:
+```javascript
+import { ArchNode } from './ArchModels.js';
+
+export class KnowledgeNode extends ArchNode {
+    constructor(id, label, description = "") {
+        super(id, label, description);
+        this.rawJsonResponse = null;   // Full parsedJsonObj from LLM
+        this.mermaidGraph = "";        // generateCausalityMermaid() output
+        this.hopRegId = null;          // generateOntoHop() Hop RegId
+        // `dependencies` and `dependents` are inherited from ArchNode!
+    }
+}
+```
+
+---
+
+## 2. Strip [ArchNode](file:///c:/Users/user/Documents/WDL_2026March23/models/ArchModels.js#35-92) from [Four_Component](file:///c:/Users/user/Documents/WDL_2026March23/models/WISH.js#466-519)
+
+In [models/WISH.js](file:///c:/Users/user/Documents/WDL_2026March23/models/WISH.js):
+1. Remove all [ArchNode](file:///c:/Users/user/Documents/WDL_2026March23/models/ArchModels.js#35-92) properties (`dependents`, `dependencies`, `isProcessed`, `order_of_appearance`, etc.) from [Four_Component](file:///c:/Users/user/Documents/WDL_2026March23/models/WISH.js#466-519) constructor.
+2. Initialize `this.knowledgeNode = new KnowledgeNode(this.RegId, nam);` in the constructor.
+3. Remove [addDependency](file:///c:/Users/user/Documents/WDL_2026March23/models/WISH.js#484-493) and [removeDependency](file:///c:/Users/user/Documents/WDL_2026March23/models/ArchModels.js#70-80) methods from [Four_Component](file:///c:/Users/user/Documents/WDL_2026March23/models/WISH.js#466-519) (they will now be called on `this.knowledgeNode`).
+4. Update [destructor()](file:///c:/Users/user/Documents/WDL_2026March23/models/WISH.js#501-510), [is_a_parent_System](file:///c:/Users/user/Documents/WDL_2026March23/models/WISH.js#511-514), and [is_a_Leaf_node](file:///c:/Users/user/Documents/WDL_2026March23/models/WISH.js#515-518) to check `this.knowledgeNode.dependencies`.
+
+---
+
+## 3. Update Global References
+
+Several services currently rely on `fourComponent.dependencies`. These must be updated to `fourComponent.knowledgeNode.dependencies`:
+
+### [services/decompEngine.js](file:///c:/Users/user/Documents/WDL_2026March23/services/decompEngine.js)
+- Lines accessing `archNode.dependents` → `archNode.knowledgeNode.dependents`
+- Lines accessing `archNode.dependencies` → `archNode.knowledgeNode.dependencies`
+- Lines setting `decompKnotRegId` / `recompKnotRegId` → set on `knowledgeNode`
+
+### [services/quipuEngine.js](file:///c:/Users/user/Documents/WDL_2026March23/services/quipuEngine.js)
+- Usage of `node.dependencies` → `node.knowledgeNode.dependencies`
+
+### [services/wdlEngine.js](file:///c:/Users/user/Documents/WDL_2026March23/services/wdlEngine.js)
+1. During [WDLsensibleRecursiveDecomposition](file:///c:/Users/user/Documents/WDL_2026March23/services/wdlEngine.js#1477-1632):
+   - Store parsed properties directly onto the `parentRow.knowledgeNode`:
+   ```javascript
+   parentRow.knowledgeNode.rawJsonResponse = parsedJsonObj;
+   parentRow.knowledgeNode.mermaidGraph = causalityGraph;
+   ```
+2. During [buildWDLRecompositionPlan](file:///c:/Users/user/Documents/WDL_2026March23/services/wdlEngine.js#1766-1945):
+   - Retrieve specs from `decompNode.knowledgeNode.rawJsonResponse` instead of searching the nonexistent `masterJsonTree`.
+   - Update `archNode.dependencies` usage to `archNode.knowledgeNode.dependencies`.
+
+---
+
+## Verification
+- Run a pipeline sweep.
+- Verify that `extractSpec.subcomponents` in Recomposition is successfully populated from the `knowledgeNode`.
+- Ensure no "undefined property 'dependencies'" errors occur during topological sort or Quipu execution.

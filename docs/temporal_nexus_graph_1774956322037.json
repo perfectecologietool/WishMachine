@@ -1,0 +1,169 @@
+{
+  "nodes": [
+    {
+      "id": 6,
+      "label": "RecipeListManager",
+      "data": {
+        "description": ""
+      },
+      "status": "active",
+      "deps": [],
+      "commits": [],
+      "innovations": {
+        "nodes": [],
+        "edges": []
+      },
+      "tasks": []
+    },
+    {
+      "id": 7,
+      "label": "StorageBackend",
+      "data": {
+        "description": ""
+      },
+      "status": "active",
+      "deps": [],
+      "commits": [],
+      "innovations": {
+        "nodes": [],
+        "edges": []
+      },
+      "tasks": []
+    },
+    {
+      "id": 8,
+      "label": "EventHandler",
+      "data": {
+        "description": ""
+      },
+      "status": "active",
+      "deps": [],
+      "commits": [],
+      "innovations": {
+        "nodes": [],
+        "edges": []
+      },
+      "tasks": []
+    },
+    {
+      "id": 9,
+      "label": "RecipeStorageAdapter",
+      "data": {
+        "description": ""
+      },
+      "status": "active",
+      "deps": [],
+      "commits": [],
+      "innovations": {
+        "nodes": [],
+        "edges": []
+      },
+      "tasks": []
+    },
+    {
+      "id": 10,
+      "label": "InMemoryRecipeStore",
+      "data": {
+        "description": ""
+      },
+      "status": "active",
+      "deps": [],
+      "commits": [],
+      "innovations": {
+        "nodes": [],
+        "edges": []
+      },
+      "tasks": []
+    },
+    {
+      "id": 11,
+      "label": "StorageReader",
+      "data": {
+        "description": ""
+      },
+      "status": "active",
+      "deps": [],
+      "commits": [],
+      "innovations": {
+        "nodes": [],
+        "edges": []
+      },
+      "tasks": []
+    },
+    {
+      "id": 12,
+      "label": "StorageWriter",
+      "data": {
+        "description": ""
+      },
+      "status": "active",
+      "deps": [],
+      "commits": [],
+      "innovations": {
+        "nodes": [],
+        "edges": []
+      },
+      "tasks": []
+    },
+    {
+      "id": 13,
+      "label": "DataSerializer",
+      "data": {
+        "description": ""
+      },
+      "status": "active",
+      "deps": [],
+      "commits": [],
+      "innovations": {
+        "nodes": [],
+        "edges": []
+      },
+      "tasks": []
+    },
+    {
+      "id": 14,
+      "label": "PageLoadCoordinator",
+      "data": {
+        "description": ""
+      },
+      "status": "active",
+      "deps": [],
+      "commits": [],
+      "innovations": {
+        "nodes": [],
+        "edges": []
+      },
+      "tasks": []
+    },
+    {
+      "id": 15,
+      "label": "FormSubmissionProcessor",
+      "data": {
+        "description": ""
+      },
+      "status": "active",
+      "deps": [],
+      "commits": [],
+      "innovations": {
+        "nodes": [],
+        "edges": []
+      },
+      "tasks": []
+    },
+    {
+      "id": 26,
+      "label": "Recomp: Start38",
+      "data": {
+        "description": ""
+      },
+      "status": "active",
+      "deps": [],
+      "commits": [],
+      "innovations": {
+        "nodes": [],
+        "edges": []
+      },
+      "tasks": []
+    }
+  ]
+}

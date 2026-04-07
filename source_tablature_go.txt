@@ -1,0 +1,1084 @@
+package main
+import (
+"bytes"
+//"context"
+"io"
+"bufio"
+"log"
+"encoding/json"
+"net/http"
+"net/url"
+"os"
+"strings"
+"time"
+"strconv"
+"sync"
+"sort"
+"path/filepath"
+"fmt"
+"google.golang.org/genai"
+)
+// --- Configuratin ---
+const (
+listenAddr = ":32323"
+ollamaServerURL = "http://localhost:11434"
+
+ollamaAPIPath = "/api/chat"
+ollamaEmbedPath = "/api/embed"
+OpenAIAPIPath = "/api/openai"
+staticDir = "."
+uiFile = "UXRF.html"
+timeoutDuration = 150 * time.Minute
+historySaveDir = "./conversation_history" 
+keyTimeout = 30 * time.Minute 
+)
+
+var storedOpenAIKey string
+var storedGoogleAIKey string
+
+var storedKeyExpiry time.Time
+var keyMutex sync.Mutex 
+
+
+//-- Topology & routing
+/*
+type WorkerNode struct {
+	Endpoint string
+	ActiveReqs int
+	LastUsed time.Time // tie breaker.
+}
+var allNodes = make(map[string]*WorkerNode)
+var modelRouteMap = make(map[string][]*WorkerNode)
+//var modelRouteMap = make(map[string]string)
+var routeMutex sync.RWMutex
+
+//returns the endpoint of the least busy node, and  callback to release it. 
+//if all nodes are busy it returns the one with the shortest queue. 
+func pickBestNode(modelName string) (string, func()) {
+	routeMutex.Lock()
+	defer routeMutex.Unlock()
+	
+	candidates, exists := modelRouteMap[modelName]
+	if !exists || len(candidates) == 0 {
+		return "", nil
+	}
+	
+	//Algorithm: least connectiosn with roundrobin tie breaker. 
+	var bestNode *WorkerNode
+	minActive := 99999
+	
+	for _, node := range candidates {
+		if node.ActiveReqs < minActive {
+			minActive = node.ActiveReqs
+			bestNode = node
+		} else if node.ActiveReqs == minActive {
+			//tie breaker
+			if bestNode == nil || node.LastUsed.Before(bestNode.LastUsed) {
+				bestNode = node
+			}
+		}
+	}
+	
+	if bestNode != nil {
+		//mark as engaged
+		bestNode.ActiveReqs++
+		bestNode.LastUsed = time.Now()
+		
+		log.Printf("Load balancer : selected &s (Active Requests: %d)", bestNode.Endpoint, bestNode.ActiveReqs )
+		
+		//return the endpoint and cleanup function 
+		//this clusure will be called when the HHTP request finishes. 
+		return bestNode.Endpoint, func() { 
+		routeMutex.Lock()
+		defer routeMutex.Unlock()
+		bestNode.ActiveReqs--
+		if bestNode.ActiveResq < 0 {
+		bestNode.ActiveReqs = 0 }
+		log.Printf("load balancer: freed %s (active requests: %d)", bestNode.Endpoint, bestNode.ActiveReqs)
+		}
+	}
+	
+	return "", nil
+}
+	
+
+type NodeConfig struct {
+	Name string `json: "name"`
+	Endpoint string `json: "endpoint"`
+	Priority int `json: "priority"`
+}
+
+type TopologyConfig struct {
+	Local NodeConfig `json:"local"`
+	Remotes []NodeConfig `json:"remotes"`
+	Services map[string]struct {
+		Available bool `json:"available"`
+	}`json:"services"`
+}
+
+type OllamaTagsResponse struct {
+	Models []struct {
+		Name string `json:"name"`
+	} `json:"models"`
+}
+
+
+func refreshTopology() {
+	
+	log.Println("scanning network topology...")
+	
+	//1. Read JSON file (Same as before) 
+	file, err := os.ReadFile("topology.json")
+	if err != nil {
+		log.Printf("Could not read topology.json: %v", err)
+		return
+	}
+	
+	var topo TopologyConfig
+	
+	if err := json.Unmarshal(file, &topo); err != nil {
+		log.Printf("unmarshalling fail")
+		return 
+	}
+	
+	//2. prepare new maps. 
+	newModelMap := make(map[string][]*WorkerNode)
+	
+	//Helper to get or create a unified WorkerNode
+	getWorker := func(endpoint string) *WorkerNode {
+		routeMutex.Lock()
+		defer routeMutex.Unlock()
+		
+		//if we already knot this node, preserve its ActiveReqs state!  
+		if existing, ok := allNodes[endpoint]; ok {
+			return existing
+		}
+		
+		newNode := &WorkerNode{Endpoint: endpoint, 
+		ActiveReqs: 0 
+		}
+		allNodes[endpoint] = newNode
+		return newNode
+	}
+	//Helper to scan a node
+	scanNode := func(endpoint string) {
+		resp, err := http.Get(endpoint + "/api/tags")
+		if err != nil { return }
+		defer resp.Body.Close()
+		
+		var tags OllamaTagsResponse
+		if err := json.NewDecoder(resp.Body).Decode(&tags); err != nil { return } 
+		
+		nodeRef :=  getWorker(endpoint)
+		
+		for _, m := range tags.Models {
+			//append this node to models's list of providers
+		newModelMap[m.Name] = append(newModelMap[m.Name], nodeRef)
+		log.Printf("topology: model '%s' available at %s", m.Name, endpoint)
+		}
+	}
+	
+	//3. execute scans
+	scanNode(topo.Local.Endpoint)
+	for _, remote := topo.Remotes {
+		scanNode(remote.Endpoint)
+	}
+	
+	//4. update routing table
+	routeMutex.Lock()
+	modelRouteMap = newModeMap
+	routeMutex.Unlock()
+}
+	
+func handleSmartChatProxy(w http.ResponseWriter, r *http.Request){
+if r.Method != http.MethodPost {
+http.Error(w, "Only POST allowed", http.StatusMethodNotAllowed)
+return
+}
+
+//1. peek at Body  (same as before)
+bodyBytes, err := io.ReadAll(r.Body)
+if err != nil { return }
+defer r.Body.Close()
+
+type ModelPeek struct {Model string `json:"model"`}
+var peek ModelPeek
+json.Unmarshal(bodyBytes, &peek)
+
+if strings.HasPrefix(peek.Model, "gemini") {
+	r.Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
+	handleGoogleAIProxy(w,r)
+	return
+}
+
+if strings.HasPrefix(peek.Model, "GPT") {
+	r.Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
+	handleGoogleAIProxy(w,r)
+	return
+}
+
+//3. LOAD BALANCING Logic
+targetURL := ollamaServerURL + ollamaAPIPath 
+
+bestEndpoint, releaseFunc := pickBestNode(peek.Model)
+
+if bestEndpoint != "" {
+	targetURL = bestEndpoint + ollamaAPIPath
+	if releaseFunc != nil {
+		defer releaseFunc()
+	}
+} else {
+	////fallback if model not found in map, try local.
+	log.Printf("model %s not found in map",peek.Model)
+}
+//4. forward request Standard proxy
+proxyReq, err := http.NewRequestWithContext(r.Context(), http.MethodPost, targetURL, bytes.NewBuffer(bodyBytes))
+if err != nil { http.Error(w, "Proxy error", 500); return }
+proxyReq.Header.Set("Content-Type", r.Header.Get("Content-Type"))
+
+client := http.DefaultClient
+resp, err := client.Do(proxyReq)
+if err != nil {
+	http.Error(w, "Node unreachable", 502)
+	return
+}
+defer resp.Body.Close()
+
+copyHeader(w.Header(), resp.Header)
+w.WriteHeader(resp.StatusCode)
+flusher, _ := w.(http.Flusher)
+io.Copy(flushWriter{w, flusher}, resp.Body)
+
+}
+
+	
+	*/
+	
+
+type WorkerNode struct {
+	Endpoint string
+	Semaphore chan struct{}
+	//The semaphore: a channel with a buffer size = max concurrent requests eg 1. 
+}
+
+//global routing table. 
+var modelRouteMap = make(map[string][]*WorkerNode)
+var routeMutex sync.RWMutex 
+//global cloud semaphores high capacity
+var googleSemaphore = make(chan struct{}, 10)
+//allow 100 concurrent google requests
+var openaiSemaphore = make(chan struct{}, 10)
+//allow 100 concurrent oa requests. 
+
+func setupFallbackLocalhost(){
+	//minimal setup if config fails. 
+	routeMutex.Lock()
+	defer routeMutex.Unlock()
+	node := &WorkerNode{
+		Endpoint: "http://localhost:11434",
+		Semaphore: make(chan struct{}, 1),
+	}
+allNodes["http://localhost:11434"] = node
+}
+
+func refreshTopology() {
+	
+	log.Println("scanning network topology...")
+	
+	//1. Read JSON file (Same as before) 
+	file, err := os.ReadFile("topology.json")
+	if err != nil {
+		log.Printf("Could not read topology.json: %v", err)
+		setupFallbackLocalhost()
+		return
+	}
+		
+	var topo TopologyConfig
+	
+	if err := json.Unmarshal(file, &topo); err != nil {
+		log.Printf("unmarshalling fail")
+		setupFallbackLocalhost() 
+		return 
+	}
+	
+	//2. prepare new maps. 
+	newModelMap := make(map[string][]*WorkerNode)
+		
+	getWorker := func(endpoint string, priority int) *WorkerNode {
+		routeMutex.Lock()
+		defer routeMutex.Unlock()
+		
+		if existing, ok := allNodes[endpoint]; ok {
+			return existing 
+		}
+		
+		capacity := 1 //if you trust a node to handle 2, set to 2.
+		
+		newNode := &WorkerNode {
+			Endpoint: endpoint, 
+			Semaphore: make(chan struct{}, capacity),
+		}
+		allNodes[endpoint] = newNode
+		return newNode 
+	}
+	
+		//Helper to scan a node
+	scanNode := func(endpoint string) {
+		resp, err := http.Get(endpoint + "/api/tags")
+		if err != nil { return }
+		defer resp.Body.Close()
+		
+		var tags OllamaTagsResponse
+		if err := json.NewDecoder(resp.Body).Decode(&tags); err != nil { return } 
+		
+		nodeRef :=  getWorker(endpoint)
+		
+		for _, m := range tags.Models {
+			//append this node to models's list of providers
+		newModelMap[m.Name] = append(newModelMap[m.Name], nodeRef)
+		log.Printf("topology: model '%s' available at %s", m.Name, endpoint)
+		}
+	}
+	
+	//3. execute scans
+	scanNode(topo.Local.Endpoint)
+	for _, remote := topo.Remotes {
+		scanNode(remote.Endpoint)
+	}
+	
+	//4. update routing table
+	routeMutex.Lock()
+	modelRouteMap = newModeMap
+	routeMutex.Unlock()
+		
+	
+}
+
+func acquireNode(modelName string) (string, func()){
+	//replaces pickBestNode
+//returns a node endpoint and a release function. 
+//this function BLOCKS if no nodes are available. 
+//1. get candidates
+routeMutex.RLock()
+candidates := modelRouteMap[modelName]
+routeMutex.RUnlock()
+
+if len(candidates) == 0 {
+return "", nil
+}
+//2. the select loop
+//we randomly shuffly to be fair but we grab a token from any candidate. 
+for {
+	for _, node := range candidates {
+		select {
+			case node.Semaphore <- struct{}{}:
+			//SUCCESS pushed token into the channel. Node is locked
+			log.Printf("acquired %s for %s", node.Endpoint, modelName)
+			
+			//return the endpoint and the release closure 
+			return node.Endpoint, func() {
+				//to release we pop the token out
+				<- node.Semaphore
+				log.Printf("released %s", node.Endpoint)
+			}
+			default: 
+//channel is full (node is busy. continue to next candidate	
+			continue
+		}
+	}
+//3. The wait state 
+//if we looped all candidates and they're all busy. 
+//wait before trying again to avoid CPU spinning. 
+//condition variable. 
+time.Sleep(60000 * time.Millisecond)
+}
+
+}
+
+func handleSmartChatProxy(w http.ResponseWriter, r *http.Request){
+	if r.Method != http.MethodPost {
+		http.Error(w, "Only POST allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	
+	//1. peek body 
+	bodyBytes, _ := io.ReadAll(r.Body)
+	defer r.Body.Close()
+	
+	type ModelPeek struct {Model string `json:"model"`}
+	var peek ModelPeek
+	json.Unmarshal(bodyBytes, &peek)
+	
+	//2. SERVICE ROUTING (virtualLLM)
+	if strings.HasPrefix(peek.Model, "gemini") { 
+	//acquire google semaphor. 
+	googleSemaphore <- struct{}{}
+	defer func() { <- googleSemaphore }()
+	r.Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
+	handleGoogleAIProxy(w,r)
+	return 
+	}
+	//3. Ollama routing //this line blocks until node is free. The browser connection stays open, spinning its wheel. 
+	endpoint, releaseFunc := acquireNode(peek.Model)
+	if endpoint == "" {
+	//fallback to localhost default logic if not specific route found. assume localhost is in topology.json anyway. 
+	endpoint = "http://localhost:11434"
+	} else { 
+	defer releaseFunc() 
+	}
+	
+	//4. forwarding the API caller 
+	targetURL := endpoint + ollamaAPIPath
+	proxyReq, _ := http.NewRequestWithContext(r.Context(), http.MethodPost, targetURL, bytes.NewBuffer(bodyBytes))
+	proxyReq.Header.Set("Content-Type", r.Header.Get("Content-Type"))
+	
+	client := http.DefaultClient
+	resp, err := client.Do(proxyReq)
+	if err != nil {
+		http.Error(w, "Node unreachable", 502)
+		return 
+	}
+	defer resp.Body.Close()
+	
+	copyHeader(w.Header(), resp.Header)
+	w.WriteHeader(resp.StatusCode)
+	flusher, _ := w.(http.Flusher)
+	io.Copy(flushWriter{w, flusher}, resp.Body)
+}
+	
+
+func main() {
+log.Println("Starting c234 server on", listenAddr)
+log.Println("Proxying requests to Ollama at :", ollamaServerURL+ollamaAPIPath)
+log.Println("Proxying embed requests to Ollama at :", ollamaServerURL+ollamaEmbedPath)
+log.Println("Serving static files from:", staticDir)
+
+/*
+if err := os.MkdirAll(historySaveDir,0755); err != nil { log.Fatalf("failed to  create directory"}
+*/
+
+//Create a new ServeMux (router)
+mux := http.NewServeMux()
+//
+// -- Handler -- 
+//
+
+//handler for the ollama proxy endpoint
+mux.HandleFunc("/api/chat", handleSmartChatProxy)
+mux.HandleFunc("/api/embed", handleEmbedProxy)  
+mux.HandleFunc("/saveHistory", handleSaveHistory)
+
+mux.HandleFunc("/api/openai", handleOpenAIProxy)
+mux.HandleFunc("/api/storeOpenAIAPIKey", handleOpenAIStoreKey)
+mux.HandleFunc("/api/clearOpenAIAPIKey", handleOpenAIClearKey)
+
+mux.HandleFunc("/api/storeGoogleAPIKey", handleStoreGoogleKey)
+mux.HandleFunc("/api/clearGoogleAPIKey", handleClearGoogleKey)
+mux.HandleFunc("/api/GoogleAI", handleGoogleAIProxy)
+
+mux.HandleFunc("/api/refreshTopology", func(w http.ResponseWriter, r *http.Request){
+	go refreshTopology()
+w.Write([]byte("Topology scan started..."))})
+
+
+
+// Handler for static files including UX.html at root
+//thsi serves UX.html specifically for / and uses FileServer for other files.
+fileServer := http.FileServer(http.Dir(staticDir))
+mux.HandleFunc("/",func(w http.ResponseWriter, r *http.Request) {
+	
+log.Println("file request recieved")
+//ensure only GET requests. 
+w.Header().Set("Cache-Context", "no-store, no-cache, must-revalidate");
+w.Header().Set("Expires","0");
+	if r.URL.Path == "/" {
+	http.ServeFile(w, r, staticDir+"/"+uiFile)
+	return
+	}
+	if strings.Contains(r.URL.Path, ".."){
+	http.Error(w,"Invalid Path", http.StatusBadRequest)
+	return
+	}
+	//let the fiel server handle other static files
+	fileServer.ServeHTTP(w,r)
+	
+log.Println("file request recieved", r.URL.Path)
+	})
+	
+	
+// --- Server Configuration ---
+server := &http.Server{
+	Addr: listenAddr, 
+	Handler: mux, 
+	ReadTimeout: timeoutDuration, // handles long uploads
+	WriteTimeout: timeoutDuration, //crucial for long ollama responses. 
+	IdleTimeout: timeoutDuration + (1 * time.Minute),
+}
+
+// --- Start sserver ---
+log.Printf("C234 server listening on %s", listenAddr)
+err := server.ListenAndServe()
+if err != nil && err != http.ErrServerClosed {
+	log.Fatalf("could not listen on %s: %v\n", listenAddr, err)
+}
+log.Println("server stopped.")
+}
+
+//--handler for saving historySaveDir
+func handleSaveHistory(w http.ResponseWriter, r *http.Request){
+	log.Println("saving HIstory commenced");
+	
+	if r.Method != http.MethodPost {
+		http.Error(w,"Method not allowed, only POST requests accepted for save History", http.StatusMethodNotAllowed)
+		return;
+	}
+	//read the body. 
+	historyJSON, err := io.ReadAll(r.Body)
+	if err != nil {
+		log.Printf("error reading request body for savedHistory");
+		http.Error(w,"savehistory failed to read body",http.StatusInternalServerError)
+		return
+	}
+	defer r.Body.Close()
+	if len(historyJSON) == 0 {
+		log.Printf("recieved empty History data", r.RemoteAddr)
+		return
+	}
+	
+//uniquefilename
+timestamp := time.Now().Unix()
+filenameU := fmt.Sprintf("history_dump_%s.json" , strconv.FormatInt(timestamp, 10))
+filePathU := filepath.Join(historySaveDir, filenameU)
+//create and write file. 
+fileD, err := os.Create(filePathU)
+if err != nil {
+	log.Printf("Error creating history file ", filePathU, err)
+return
+}
+defer fileD.Close()
+
+_, err = fileD.Write(historyJSON)
+if err != nil {
+	log.Printf("error in writing to file %s", filePathU)
+return
+}
+
+log.Printf("successfullysaved conversation history to %s", filePathU)
+w.WriteHeader(http.StatusOK)
+w.Write([]byte(fmt.Sprintf("conversationhistory saved successfully to %s", filenameU)))
+}
+
+
+//copyHeaders copies specific headers from source to destination/skips certain headers like connection which are hopbyhop
+func copyHeader(dst, scr http.Header){
+	for k, vv := range scr {
+		//filter hopbyhop headers? )often handled by server/client// EG: if k == "Connection" || k == "Proxy-Connection" 
+		for _, vb := range vv {
+			dst.Add(k,vb)
+		}
+	}
+}
+
+
+// --- Proxy Handler Logic ---
+// handleOllamaProxy forwards requests to the Ollama server and strewams the response.
+func handleOllamaProxy(w http.ResponseWriter, r *http.Request){
+	//1. validate request method (POST)
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method Not Allowed: Only POST requests are accepted", http.StatusMethodNotAllowed)
+		log.Printf("Received nonPOST request on /api/ollama from %s",r.RemoteAddr)
+	return
+	}
+	//2. Prepare the request to Ollama
+	ollamaURL := ollamaServerURL + ollamaAPIPath
+
+//read the body from the incoming request (from UX.html)
+//read it into a buffer first in case its needed later or if underlying stream needs closing
+clientRequestBody, err := io.ReadAll(r.Body)
+if err != nil {
+	http.Error(w, "failed to read request body", http.StatusInternalServerError)
+	log.Printf("Error reading request body from %s: %v", r.RemoteAddr, err)
+return
+}
+defer r.Body.Close()// close the original request
+
+//create a new request to the ollama server
+proxyReq, err := http.NewRequestWithContext(r.Context(), http.MethodPost, ollamaURL, bytes.NewReader(clientRequestBody))
+if err != nil {
+	http.Error(w, "failed to create proxy request", http.StatusInternalServerError)
+	log.Printf("error creating proxy request %v",err)
+	return
+}	
+
+//3. copy Headers
+//copy necessary headers from the client request to proxy request
+proxyReq.Header.Set("Content-Type", r.Header.Get("Content-Type"))
+proxyReq.Header.Set("Accept", r.Header.Get("Accept"))//often "application/json" for streaming. 
+//set the host header correctly for ollama server
+targetURL, _ := url.Parse(ollamaServerURL)
+proxyReq.Host = targetURL.Host 
+//anything else? 
+
+log.Printf("proxying request for %s to %s", r.RemoteAddr, ollamaURL)
+
+//4. Execute the request to Ollama
+//Use a client with potentially adjusted timeouts if needed; DefaultClient respects context.
+client := http.DefaultClient
+ollamaResp, err := client.Do(proxyReq)
+if err != nil {
+	//handle some errors
+	if os.IsTimeout(err) {
+		http.Error(w,"gateway timeout: ollama server timed out", http.StatusGatewayTimeout)
+		log.Printf("Timeout connecting to Ollama %v", err)
+	}else{
+		http.Error(w,"bad gateway: error contacting ollama server", http.StatusBadGateway)
+		log.Printf("error connecting to ollama %v", err)
+	}
+return
+}
+defer ollamaResp.Body.Close() 
+
+log.Printf("recived response from ollama %d", ollamaResp.StatusCode)
+
+//5. Stream the response back to the original client (browser)
+//Copy ollama response headers
+copyHeader(w.Header(), ollamaResp.Header)
+//write the ollama status code to ur response writer
+w.WriteHeader(ollamaResp.StatusCode)
+
+flusher, ok := w.(http.Flusher)
+if !ok {
+	log.Println("Warning: ResponseWriter doesnt support flushing")
+}
+
+//use io.copy to efficiently stream the body//io.copy handles chucked encoding automatically if present in ollamaResp
+bytesCopied, err := io.Copy(flushWriter{w,flusher}, ollamaResp.Body)
+if err != nil {
+	//this error might occur if the client disconeccted
+	log.Printf("Error streaming ollama sresponse to client %s:%v",r.RemoteAddr, err)
+}
+log.Printf("finished streaming response to %s (%d)", r.RemoteAddr, bytesCopied)
+}
+
+// NEW: Proxy Handler for Embeddings
+func handleEmbedProxy(w http.ResponseWriter, r *http.Request){
+    //1. validate request method (POST)
+    if r.Method != http.MethodPost {
+        http.Error(w, "Method Not Allowed: Only POST requests are accepted", http.StatusMethodNotAllowed)
+        log.Printf("Received nonPOST request on /api/embed from %s",r.RemoteAddr)
+    return
+    }
+    
+    //2. Prepare the request to Ollama
+    ollamaURL := ollamaServerURL + ollamaEmbedPath
+
+    clientRequestBody, err := io.ReadAll(r.Body)
+    if err != nil {
+        http.Error(w, "failed to read request body", http.StatusInternalServerError)
+        return
+    }
+    defer r.Body.Close()
+
+    proxyReq, err := http.NewRequestWithContext(r.Context(), http.MethodPost, ollamaURL, bytes.NewReader(clientRequestBody))
+    if err != nil {
+        http.Error(w, "failed to create proxy request", http.StatusInternalServerError)
+        return
+    }   
+
+    //3. copy Headers
+    proxyReq.Header.Set("Content-Type", "application/json")
+    proxyReq.Header.Set("Accept", "application/json") 
+    targetURL, _ := url.Parse(ollamaServerURL)
+    proxyReq.Host = targetURL.Host 
+
+    log.Printf("proxying embedding request for %s to %s", r.RemoteAddr, ollamaURL)
+
+    //4. Execute the request to Ollama
+    client := http.DefaultClient
+    ollamaResp, err := client.Do(proxyReq)
+    if err != nil {
+        if os.IsTimeout(err) {
+            http.Error(w,"gateway timeout: ollama server timed out", http.StatusGatewayTimeout)
+        }else{
+            http.Error(w,"bad gateway: error contacting ollama server", http.StatusBadGateway)
+        }
+        return
+    }
+    defer ollamaResp.Body.Close() 
+
+    log.Printf("received embedding response from ollama %d", ollamaResp.StatusCode)
+
+    //5. Send response back
+    copyHeader(w.Header(), ollamaResp.Header)
+    w.WriteHeader(ollamaResp.StatusCode)
+    io.Copy(w, ollamaResp.Body)
+}
+
+
+//flushWriter is a helper to flush the response writer after each write call. This ensures chunks are sent immediately over the network. 
+type flushWriter struct {
+	w http.ResponseWriter
+	flusher http.Flusher
+}
+
+func (fw flushWriter) Write (p []byte) (n int, err error){
+	n, err = fw.w.Write(p)//write the data
+	if fw.flusher != nil {
+		fw.flusher.Flush()//flush data to the client
+	}
+	return 
+}
+
+func getActiveOpenAIKey() string {
+	keyMutex.Lock()
+	defer keyMutex.Unlock()
+	if storedOpenAIKey == "" {
+		return ""
+	}
+	if time.Now().After(storedKeyExpiry){
+		storedOpenAIKey = ""
+		storedKeyExpiry = time.Time{}
+		return ""
+	}
+	return storedOpenAIKey
+}
+	
+
+
+func handleOpenAIProxy(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Only POST allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	
+	apiKey := getActiveOpenAIKey();
+	if apiKey == "" {
+		http.Error(w, "No valid OpenAI API key stored", http.StatusUnauthorized)
+	return
+	}
+	//read incoming JSON body from browser. 
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		http.Error(w, "Failed to read body", 500)
+		return
+	}
+	
+	defer r.Body.Close()
+	
+	//Forward request to ChatGPT API
+	req, err := http.NewRequest( 
+	"POST", 
+	"https://api.openai.com/v1/chat/completions", 
+	bytes.NewReader(body),
+	)
+	if err != nil {
+		http.Error(w, "Failed to create request", 500)
+	return
+	}
+
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+apiKey)
+	
+	client := http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		http.Error(w, "Error contacting OpenAI", 502)
+		return
+	}
+	defer resp.Body.Close()
+	
+	//Prepare to stream SSE back to browser
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("Connection", "keep-alive")
+	
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		http.Error(w, "Streaming unsupported", 500)
+		return
+	}
+	
+	reader := bufio.NewReader(resp.Body)
+	for {
+		line, err := reader.ReadString('\n')
+		if err != nil {
+			break
+		}
+		w.Write([]byte(line))
+		flusher.Flush()
+	}
+}
+
+func handleOpenAIStoreKey(w http.ResponseWriter, r *http.Request){
+	if r.Method != http.MethodPost {
+		http.Error(w, "Only POST allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	//read key from body
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		http.Error(w, "Failed To read body", 500)
+		return
+	}
+	defer r.Body.Close()
+	
+	apiKey := strings.TrimSpace(string(body))
+	if apiKey == "" {
+		http.Error(w, "Empty API Key", http.StatusBadRequest)
+		return
+	}
+	
+	keyMutex.Lock()
+	storedOpenAIKey = apiKey
+	storedKeyExpiry = time.Now().Add(keyTimeout)
+	keyMutex.Unlock()
+	
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte("Key stored"))
+}
+
+func handleOpenAIClearKey(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost { 
+	http.Error(w, "only POST allowed", http.StatusMethodNotAllowed)
+return
+}
+keyMutex.Lock()
+storedOpenAIKey = ""
+storedKeyExpiry = time.Time{}
+keyMutex.Unlock()
+
+w.WriteHeader(http.StatusOK)
+w.Write([]byte("key cleared"))
+}
+
+
+func handleStoreGoogleKey(w http.ResponseWriter, r *http.Request){
+	if r.Method != http.MethodPost {
+		http.Error(w, "Only POST allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		http.Error(w, "Failed to read body", http.StatusInternalServerError)
+		return
+	}
+	defer r.Body.Close()
+	apiKey := strings.TrimSpace(string(body))
+	
+	if apiKey == "" {
+		http.Error(w, "Empty API key", http.StatusBadRequest)
+		return
+	}
+	
+	keyMutex.Lock()
+	storedGoogleAIKey = apiKey
+	storedKeyExpiry = time.Now().Add(keyTimeout)
+	keyMutex.Unlock()
+	
+	log.Println("Google ai api key stored securely in memory.")
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte("Key stored"))
+}
+
+func handleClearGoogleKey(w http.ResponseWriter, r *http.Request){
+	if r.Method != http.MethodPost {
+		http.Error(w, "Only POST allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	
+	keyMutex.Lock()
+	storedGoogleAIKey = ""
+	storedKeyExpiry = time.Time{}
+	keyMutex.Unlock()
+	
+	log.Println("google ai api key cleared from memory.")
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte("key cleared"))
+}
+// -- Google AI PRoxy Handler -- 
+
+//Helper struct to read the incoming Quipu/Ollama JSON format
+type OllamaRequest struct {
+	Model string `json: "model"`
+	Messages []struct {
+		Role string `json:"role"`
+		Content string `json:"content"`
+	} `json:"messages"`
+	Stream bool `json:"stream"`
+}
+
+//Helper struct to write outgoing JSON chunks (mimicking Ollama response)
+type OllamaResponse struct {
+	Model string `json:"model"`
+	Message struct {
+		Role string `json:"role"`
+		Content string `json:"content"`
+	} `json:"messages"`
+	Done bool `json:"done"`
+}
+
+
+
+//request structure expected from Quipu
+type GoogleProxyRequest struct {
+	Model string `json:"model"`
+	Prompt string `json:"prompt"`
+}
+//response rstructure sent back to Quipu
+type GoogleProxyResponse struct {
+	Content string `json:"content"`
+	Error string `json:"error,omitempty"`
+}
+
+
+
+func handleGoogleAIProxy (w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method Not Allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	
+	//1. Validate Key Existence and Expiry
+	keyMutex.Lock()
+	apiKey := storedGoogleAIKey
+	keyMutex.Unlock()
+	
+	if apiKey == "" {
+		http.Error(w, "API Key not found. Please authenticate.", http.StatusUnauthorized)
+		return
+	}
+	
+	/*
+	expiry := storedKeyExpiry
+	if time.Now().After(expiry){
+		//Auto-clear expired key
+		keyMutex.Lock()
+		storedGoogleAIKey = ""
+		keyMutex.Unlock()
+		http.Error(w, "API Key expired. Please  re-authenticate", http.StatusUnauthorized)
+		return
+	} */
+
+//2. parse incoming request from quipu
+
+	var req OllamaRequest 
+ if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+//	var req GoogleProxyRequest
+//	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "invalid JSON body", http.StatusBadRequest)
+		return
+	}
+	//default to flash if model is missing
+	if req.Model == "" {
+		req.Model = "gemini-2.0-flash"
+	}
+	
+	//3. Initialize GenAI Client using the stored key 
+	ctx := r.Context()
+client, err := genai.NewClient(ctx, &genai.ClientConfig{APIKey: apiKey, Backend: genai.BackendGeminiAPI, })
+if err != nil {
+	log.Printf("Failed to create GenAI client: %v", err)
+	http.Error(w, "Failed to initialize AI client", http.StatusInternalServerError)
+	return
+}
+
+var promptBuilder strings.Builder
+for _, msg := range req.Messages {
+	promptBuilder.WriteString(fmt.Sprintf("Role: %s ; Content: %s ;", msg.Role, msg.Content))
+}
+
+
+
+
+flusher, ok := w.(http.Flusher)
+if !ok {
+	http.Error(w, "Streaming not supported", http.StatusInternalServerError)
+return
+}
+
+//5. send response back to quipu//we wrap the raw text in a JSON object for easier parsing in JS
+//responseObj := GoogleProxyResponse{ Content: result.Text(),}
+
+w.Header().Set("Content-Type", "application/json")
+w.Header().Set("Transfer-Encoding", "chunked")
+
+//4. Generate Content 
+log.Printf("Proxying request to google AI [model: %s]", req.Model)
+stream4 := client.Models.GenerateContentStream(
+ctx, 
+req.Model,
+genai.Text(promptBuilder.String()),
+nil,
+)
+ 
+
+//json.NewEncoder(w).Encode(responseObj)
+for resp, err := range stream4 {
+	if err != nil {
+		sendErrorChunk(w, flusher, req.Model, err)
+	return
+	 }
+	if err != nil {
+		log.Printf("Google API Error: %v", err)
+		//Send error as content so user sees it in UI
+		errJSON, _ := json.Marshal(OllamaResponse{
+Model: req.Model, 
+Message: struct { Role string "json:\"role\""; Content string "json:\"content\"" }{
+		Role: "assistant", Content: fmt.Sprintf("\n[Error: %v]",err)},
+Done: true,
+		})
+w.Write(errJSON)
+w.Write([]byte("\n"))
+flusher.Flush()
+return
+	}
+
+
+var chunkText string
+if len(resp.Candidates) > 0 {
+	for _, part := range resp.Candidates[0].Content.Parts {
+	chunkText += part.Text
+	}
+}
+if chunkText != "" {
+	sendResponseChunk(w, flusher, req.Model, chunkText, false)
+}
+}
+sendResponseChunk(w, flusher, req.Model, "", true)
+ }
+ 
+ 
+ func sendResponseChunk(w http.ResponseWriter, f http.Flusher, model, text string, done bool) {
+	 resp :=  OllamaResponse{
+Model: model,
+Done: done,
+	 }
+
+if !done {
+resp.Message.Role = "assistant"
+resp.Message.Content = text
+}	
+
+jsonBytes, _ := json.Marshal(resp)
+w.Write(jsonBytes)
+w.Write([]byte("\n"))
+f.Flush()
+ 
+ }
+ 
+ func sendErrorChunk(w http.ResponseWriter, f http.Flusher, model string, err error){
+	 resp := OllamaResponse {
+		 Model: model, 
+		 Done: true,
+	 }
+	 resp.Message.Role = "assistant"
+	 resp.Message.Content = fmt.Sprintf("\n[Error: %v]",err)
+	 
+	 jsonBytes, _ := json.Marshal(resp)
+	 w.Write(jsonBytes)
+	 w.Write([]byte("\n"))
+	 f.Flush()
+ }
+ 
+ 

@@ -1,0 +1,38 @@
+# Recomposition Pipeline Stabilization & Reverse-Tree Mapping
+
+This plan addresses the 4 critical bugs and architectural synchronization issues currently stalling the complete execution of the overarching Seven\_Wish Recomposition phase.
+
+## User Review Required
+
+> [!IMPORTANT]
+> To truly "reverse" the visual layout of the tree, implementing a CSS `flex-direction: row-reverse` on the root Recomposition tree container might be natively stronger than entirely re-writing `tableRenderer`'s HTML `colspan/rowspan` algorithms. Please let me know if flipping the tree visually right-to-left is what you were imagining.
+
+## Proposed Changes
+
+### 1. `utils/helpers.js`
+Resolves the **green but empty leaf nodes**.
+- **[MODIFY] [helpers.js](file:///c:/Users/user/Documents/WDL_2026March23/utils/helpers.js)**
+  - Update `extractCodeBlocks()` so that if the Regular Expression array length is `0` (meaning the LLM failed to wrap its code inside strict Markdown \`\`\` ticks), it gracefully fails open by returning the `truncateThinkingTags(text)` raw response instead of a completely empty string.
+
+### 2. `services/wdlEngine.js`
+Resolves the **missing parent contexts** and **missing callbacks**.
+- **[MODIFY] [wdlEngine.js](file:///c:/Users/user/Documents/WDL_2026March23/services/wdlEngine.js)**
+  - **Knot 1 Refactoring**: In `buildWDLRecompositionPlan`, the Parent's first Knot (System Architect Advice) is currently marked `USER_PROMPT_NO_CONTEXT` and receives no context, resulting in the LLM complaining "I don't have these subcomponents!'. We will pre-calculate the `contextAddrs` and explicitly append them to Knot 1. 
+  - **Callback Assurance**: We will assign both Knot 1 and Knot 2 `.responseCallbackId = 'extractCodeBlocks'` so their output is gracefully caught.
+
+### 3. `renderers/tableRenderer.js`
+Resolves the **disconnected/far away root knot** and the aesthetic logic.
+- **[MODIFY] [tableRenderer.js](file:///c:/Users/user/Documents/WDL_2026March23/renderers/tableRenderer.js)**
+  - Detect when `currentView === 'RECOMPOSITION'` inside `renderDynamicScenarioTable`.
+  - Upon detection, inject a specialized CSS class `recomp-reverse-tree` to the root container. This will flip the visual node progression `row-reverse`, achieving the aesthetic "temporal delay" effect of a reversed-timeline without aggressively altering the DOM rendering loop.
+  - Fix the isolated node mapping logic so that the `Hyper_Five_Choice` properly merges visually instead of floating in the DOM.
+
+## Open Questions
+
+> [!WARNING]
+> In `wdlEngine.js`, the Parent node generates **Two Knots** (Knot 1: Overarching Advice, Knot 2: Implement Code). Do you want both of these Knots to receive the exact same children Context arrays? My instinct says Yes, otherwise Knot 1 will continue hallucinating.
+
+## Verification Plan
+1. **Empty String Test**: Force a local LLM return containing no code-blocks to verify the new `extractCodeBlocks` defaults to raw output correctly without breaking the UI.
+2. **Context Linkage**: Verify that examining a generic Parent_Node outputs a blue connection string displaying multiple `knotIds` inside its "Required Contexts" GUI text area.
+3. **Asthetic Flip**: Toggle between Decomposition and Recomposition in the UI; verify the Recomp table renders fully consolidated, right-to-left (converging).

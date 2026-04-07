@@ -1,0 +1,65 @@
+	WISH: "WDL Context Wiring Test"
+	  DIAGNOSIS:
+		CHOICE: "Initialization"
+		  ROW: "Action Branch 1"
+			KNOT:
+			  TYPE: "USER_PROMPT_NO_CONTEXT"
+			  FORCE_JSON: true
+			  PROMPT: "Please provide a JSON object containing a 'greeting' property."
+			KNOT:
+			  TYPE: "USER_PROMPT_OTHER_KNOT_HISTORY"
+			  CONTEXT_SOURCE: "0,0,0,0,0"
+			  PROMPT_SOURCE: "0,0,0,0,0"
+			  PROMPT_FN: "INPUTinterpolateTemplate"
+			  RESPONSE_FN: "extractCodeBlocks"
+			  PROMPT: "Extract the greeting from the previous step and write it inside a Python script."
+
+
+
+
+Once we have the Usecase we can work through the steps. 
+1) The User types in a prompt in a Hyper_Three_Cell within the Six_Plan's dynamic Scenario Table. 
+2) upon updating the textarea element, the renderAndCoallesceAll function "coallesces" the Five_Choice branches into a single Four_Row path. 
+3) the User clicks on the "Execute this" or "Run to here" button on the CoallescedRow's HYper_Three_Cell elements. 
+4) the execute function chosen, executes each Hyper_Three_Cell one by one. 
+5)The Execute function collates the context based on its Knot_Type. 
+6) The Execute Function then facilitates the Hyper_Three_cell.promptCallbackId's execution. 
+7) The Execute Function sends the prepared Hyper_Three_Cell to the /api/chat.php API endpoint. 
+8) The /api/chat.php recieves the JSON object version of the ChatRequest object.
+9) /api/chat.php Sends the appropriate format to the www.ollama.com/api/chat API endpoint. 
+10) the www.ollama.com/api/chat API endpoint returns the response in chunks as stream or in a single response, for which the api/chat.php must be listening for a long time. If php struggles to keep the connection open for a long time, then it is better to ask for chunks and keep the connection open as the tokens are returned enveloped in full HTTP response packets. 
+11) The Hyper_Three_Cell executing function recieves the response from the /api/chat.php .
+12) The UI of the Hyper_Three_Cell is updated by updating the (Two_Layer) Hyper_Three_Cell.TC.response.content 
+13) the Executing function facilitates the execution of the Hyper_Three_Cell.responseCallbackId function . 
+14)  The coallescedRun executing function continues iterating through the Four_Row's array of Hyper_Three_Cell.    
+
+--Upon Reloading: 
+1) The tableRenderer.php asks the /api/tags.php for the models via the function "populateModelOptions()" . 
+2) The /api/tags.php checks the local storage (in MySQL) for the State cache of the models available via ollama.com/api/tags 
+if the cache is fresh, then 
+2a) The cache is fetched from MySQL state, and returned to the tableRenderer.php and state.php to update the modelOptions object array with its model.num_ctx values. 
+
+If the cache is stale, then
+2a) Step 2a occurs and the response is instantaneous.  
+2b) /api/tags.php calls www.ollama.com/api/tags 
+3) for each element within the response, the /api/tags.php communicates with /api/show.php to get the appropriate num_ctx, as per the algorithm that deals with the peculiar JSON object returned by www.ollama.com/api/show (RegEx searching for *.num_ctx )
+4) the Cache is updated. 
+
+--To use the Decomposition Recomposition Pipeline:
+1) The user types in the subject of interest. 
+2) the WDL creates a new Six_Plan with a New Hyper_Three_Cell. whose responseCallbackId is set to "WDLsensibleRecursiveDecomposition" 
+3) The SIx_Plan is executed. 
+4) the Hyper_Three_Cell executes and the response is returned from the /api/chat.php
+5) the Hyper_Three_Cell.responseCallbackId function takes the response, and uses the response to create a terminating FIve_Choice on this Hyper_Three_Cell's Four_Row parentBranch. 
+6) Execution is passed to this new Five_Choice
+7) The Five_Choice executes each of its branches. each new Terminating Five_Choice is added to a 'time column's execution stack' 
+8) So execution of the Six_plan occurs in a Column by column fashion: left to right, top to bottom. left to right, top to bottom... 
+ 9) Once the limit of Five_Choices is reached, or the limit on the number of columns is reached, the recomposition is triggered. 
+10) the recomposition phase builds a directed tree graph from the Decomposition phase, where Each Five-Choice is a parent_Node, and each Four_Row is either a leaf_Node body or a parent_Node's body.
+11) a new Six_Plan is created.  
+12) WDL is used to build the recomposition Six_Plan as the bottom-up reversal of the Decomposition Six_Plan. 
+13) once the Recomposition Six_Plan is created, it is executed.  
+14) The final response from the Recomposition Six_PLan which is the head of the reversed tree, is paired with the prompt from the first  Hyper_Three_Cell used in the Decomposition Six_Plan to create the summary Hyper_Three_Cell of the Seven_Wish. 
+
+--To use the Curriculum builder: 
+1) The User types in the topic of interest. 

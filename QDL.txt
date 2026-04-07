@@ -1,0 +1,1486 @@
+﻿dst quipu https://gemini.google.com/app/e75534198fa539d9?hl=en_GB
+managing tools https://gemini.google.com/app/e75534198fa539d9?hl=en_GB
+
+
+
+
+<prompt>Write a concrete EBNF. Do we also need instantiation token like 'new' ? or is 'new' implicit in the fact that the we are talking about the creation of a quipu? </prompt>
+Short answer on new: you don’t need it.
+In this DSL, a declaration is an instantiation: when you say quipu 0 { ... } or knot 0,0,0 { ... }, you’re declaring/creating that quipu/knot. A new keyword only becomes useful if you later add mutating commands that operate on already-loaded Quipus.
+Below is a concrete EBNF for a Quipu Description Language that matches the data model in quipu-data-models.js.
+________________
+
+
+1. High‑Level Structure
+Program        = { TopLevelDecl } ;
+
+
+TopLevelDecl   = QuipuDecl
+               | KnotDecl          (* flat style, no quipu/strand blocks *)
+               | RelationStmt
+               ;
+
+
+You can choose either:
+* Structured style using quipu / strand blocks, or
+* Flat style where all knots are just declared by address and quipus/strands are inferred from the address.
+Both are supported by this grammar.
+________________
+
+
+2. Quipu / Strand / Knot Declarations
+QuipuDecl      = "quipu" QuipuId "{"
+                   { StrandDecl }
+                 "}" ;
+
+
+StrandDecl     = "strand" StrandId "{"
+                    { KnotDecl }
+                 "}" ;
+
+
+KnotDecl       = "knot" KnotAddress "{"
+                    { KnotField }
+                 "}" ;
+
+
+Knot fields
+These map almost 1‑to‑1 to Knot fields (knotType, sourcePromptKnotIds, sourceContextKnotIds, callbacks, model, etc.).
+KnotField      = ModelField
+               | TypeField
+               | ContextField
+               | ContextFnField
+               | PromptSourcesField
+               | PromptFnField
+               | ResponseFnField
+               | ForceJsonField
+               ;
+
+
+ModelField     = "model" ":" ModelId ";" ;
+TypeField      = "type" ":" KnotTypeId ";" ;
+
+
+ContextField       = "context" ":" KnotList ";" ;
+ContextFnField     = "context_fn" ":" "*" FunctionId ";" ;
+PromptSourcesField = "prompt_sources" ":" KnotList ";" ;
+PromptFnField      = "prompt_fn" ":" "*" FunctionId ";" ;
+ResponseFnField    = "response_fn" ":" "*" FunctionId ";" ;
+
+
+ForceJsonField     = "force_json" ":" BooleanLiteral ";" ;
+
+
+You can choose to omit type and infer it from the context/prompt sources, or explicitly set it to a value from Knot_Type.
+________________
+
+
+3. Relationship / Operator Statements
+These are sugar that compile into sourcePromptKnotIds, sourceContextKnotIds, and callback fields.
+RelationStmt   = SendResponseStmt
+               | GetContextStmt
+               | UseFnOnPromptStmt
+               | UseFnOnContextStmt
+               | UseFnOnResponseStmt
+               ;
+
+
+SendResponseStmt     = KnotAddress "SENDS_RESPONSE_TO" KnotAddress ";" ;
+GetContextStmt       = KnotAddress "GETS_CONTEXT_FROM" KnotAddress ";" ;
+
+
+UseFnOnPromptStmt    = KnotAddress "USES_FUNCTION_ON_PROMPT_SOURCE"
+                       "*" FunctionId
+                       "FOR" KnotAddress
+                       ";" ;
+
+
+UseFnOnContextStmt   = KnotAddress "USES_FUNCTION_ON_CONTEXT_SOURCE"
+                       "*" FunctionId
+                       "FOR" KnotAddress
+                       ";" ;
+
+
+UseFnOnResponseStmt  = KnotAddress "USES_FUNCTION_ON_RESPONSE"
+                       "*" FunctionId
+                       ";" ;
+
+
+Intended semantics (informally):
+* A SENDS_RESPONSE_TO B;
+→ B.sourcePromptKnotIds += A
+* A GETS_CONTEXT_FROM B;
+→ A.sourceContextKnotIds += B
+* B USES_FUNCTION_ON_PROMPT_SOURCE *f FOR A;
+→ B.requestCallbackId = "f"; B.sourcePromptKnotIds += A
+* B USES_FUNCTION_ON_CONTEXT_SOURCE *f FOR A;
+→ B.requestCallbackId = "f"; B.sourceContextKnotIds += A
+* A USES_FUNCTION_ON_RESPONSE *f;
+→ A.responseCallbackId = "f"
+________________
+
+
+4. Knot Addresses & Lists
+KnotList       = KnotAddress { ";" KnotAddress } ;
+
+
+KnotAddress    = Integer "," Integer "," Integer ;
+(* [knotIndex, strandIndex, quipuIndex] *)
+
+
+In the structured style, the strand and quipu blocks should be consistent with these indices. In the flat style, the runtime can infer which Quipu/Strand a knot belongs to solely from its address.
+________________
+
+
+5. Identifiers, Literals, and Lexical Rules
+QuipuId        = Integer ;
+StrandId       = Integer ;
+
+
+ModelId        = Identifier ;
+FunctionId     = Identifier ;
+
+
+KnotTypeId     = Identifier ;
+(* Should be one of the Knot_Type strings, e.g.
+   "USER_PROMPT_NO_CONTEXT" |
+   "USER_PROMPT_OWN_STRAND_HISTORY" |
+   "SOURCE_KNOT_RESPONSE_WITH_TEMPLATE_NO_CONTEXT" |
+   "MULTI_KNOT_AGGREGATION_WITH_TEMPLATE_OWN_STRAND_HISTORY" |
+   ...
+*)
+
+
+BooleanLiteral = "true" | "false" ;
+
+
+Identifier     = Letter { Letter | Digit | "_" | "." | "-" } ;
+Integer        = Digit { Digit } ;
+
+
+Letter         = "A" | … | "Z" | "a" | … | "z" ;
+Digit          = "0" | "1" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9" ;
+
+
+Optional: Comments
+If you want C‑style comments:
+Comment        = "//" { anyCharExceptNewline } Newline
+               | "/*" { anyCharExceptStarSlash } "*/" ;
+
+
+Lexer rule: ignore Whitespace and Comment tokens.
+________________
+
+
+6. About new
+Given the above:
+   * quipu 0 { ... } creates Quipu #0.
+   * strand 1 { ... } creates strand #1 within that quipu.
+   * knot 0,1,0 { ... } creates that knot.
+So an explicit new keyword is redundant. You only really need new if you later add an imperative layer like:
+new knot 2,0,0;
+connect 0,0,0 SENDS_RESPONSE_TO 2,0,0;
+
+
+For now, since this language is meant to behave like a textual toJSON/fromJSON for your data models, implicit creation via declaration is the cleanest approach.
+If you’d like, next step I can:
+   * Tighten this EBNF further into something a hand‑rolled recursive‑descent parser can implement directly, or
+   * Design a tiny AST structure + “compiler” that turns this into actual Quipu/Strand/Knot instances in your current JS runtime.
+
+
+
+
+
+
+<prompt>We can name this language, and write a lexer for it </prompt>
+Nice, this is a fun one. Let’s do both: name the language and write a real lexer you can drop into your JS project.
+I’ll assume JavaScript for the lexer, since Quipu itself is JS/DOM-based.
+________________
+
+
+1. Name of the language
+A clean, descriptive name that fits what you’ve built:
+QDL – Quipu Description Language
+It’s:
+   * Short
+   * Speaks to “this is the textual form of a Quipu”
+   * Matches the idea that it’s a toJSON/fromJSON-like serialization, but more human.
+If later you want variants (e.g. temporal emphasis), you can always coin QDL-T or QDL-K (temporal / knot-focused).
+________________
+
+
+2. Do we need an explicit new token?
+No—you can skip new.
+In QDL:
+   * quipu 0 { ... } is the creation of Quipu 0.
+   * strand 1 { ... } is the creation of Strand 1 (within that quipu context).
+   * knot 0,1,0 { ... } is the creation of that Knot.
+Because your language is declarative and “one program = one workflow description”, explicit instantiation keywords just add noise. If you later add imperative mutations (“attach new strand to active quipu at runtime”), then new might make sense in an extended dialect.
+For the base “describe the structure” language, declaration = instantiation is perfect.
+________________
+
+
+3. Token set for the QDL lexer
+We’ll implement a small lexer that turns QDL source into a stream of tokens.
+3.1 Token types
+We’ll classify tokens roughly like this:
+   * Keywords / commands
+   * quipu, strand, knot
+   * model, type, context, context_fn, prompt_sources, prompt_fn, response_fn, force_json
+   * true, false
+   * SENDS_RESPONSE_TO, GETS_CONTEXT_FROM,
+USES_FUNCTION_ON_PROMPT_SOURCE,
+USES_FUNCTION_ON_CONTEXT_SOURCE,
+USES_FUNCTION_ON_RESPONSE,
+FOR
+      * Punctuation
+      * {, }, :, ;, ,, *
+      * Literals
+      * INTEGER (for numeric ids)
+      * IDENTIFIER (for models, function ids, knot types)
+      * EOF
+We’ll support comments:
+      * // line comment
+      * /* block comment */
+and ignore whitespace.
+________________
+
+
+4. Concrete JavaScript lexer implementation
+Here’s a ready-to-use lexer for QDL. You can put this in something like qdl-lexer.js and import/use it from your parser.
+// qdl-lexer.js
+// A simple lexer for QDL (Quipu Description Language)
+
+
+export const TokenType = {
+  // Keywords
+  KW_QUIPU: "KW_QUIPU",
+  KW_STRAND: "KW_STRAND",
+  KW_KNOT: "KW_KNOT",
+
+
+  KW_MODEL: "KW_MODEL",
+  KW_TYPE: "KW_TYPE",
+  KW_CONTEXT: "KW_CONTEXT",
+  KW_CONTEXT_FN: "KW_CONTEXT_FN",
+  KW_PROMPT_SOURCES: "KW_PROMPT_SOURCES",
+  KW_PROMPT_FN: "KW_PROMPT_FN",
+  KW_RESPONSE_FN: "KW_RESPONSE_FN",
+  KW_FORCE_JSON: "KW_FORCE_JSON",
+
+
+  KW_TRUE: "KW_TRUE",
+  KW_FALSE: "KW_FALSE",
+
+
+  KW_SENDS_RESPONSE_TO: "KW_SENDS_RESPONSE_TO",
+  KW_GETS_CONTEXT_FROM: "KW_GETS_CONTEXT_FROM",
+  KW_USES_FN_PROMPT: "KW_USES_FN_PROMPT",
+  KW_USES_FN_CONTEXT: "KW_USES_FN_CONTEXT",
+  KW_USES_FN_RESPONSE: "KW_USES_FN_RESPONSE",
+  KW_FOR: "KW_FOR",
+
+
+  // Punctuation
+  LBRACE: "LBRACE",       // {
+  RBRACE: "RBRACE",       // }
+  COLON: "COLON",         // :
+  SEMICOLON: "SEMICOLON", // ;
+  COMMA: "COMMA",         // ,
+  STAR: "STAR",           // *
+
+
+  // Literals
+  INTEGER: "INTEGER",
+  IDENTIFIER: "IDENTIFIER",
+
+
+  EOF: "EOF"
+};
+
+
+export class Token {
+  constructor(type, value, line, column) {
+    this.type = type;
+    this.value = value;
+    this.line = line;
+    this.column = column;
+  }
+
+
+  toString() {
+    return `${this.type}(${this.value})@${this.line}:${this.column}`;
+  }
+}
+
+
+export class QDLLexer {
+  constructor(input) {
+    this.input = input;
+    this.length = input.length;
+    this.pos = 0;
+    this.line = 1;
+    this.column = 1;
+  }
+
+
+  isAtEnd() {
+    return this.pos >= this.length;
+  }
+
+
+  peek() {
+    return this.isAtEnd() ? '\0' : this.input[this.pos];
+  }
+
+
+  advance() {
+    const ch = this.peek();
+    this.pos++;
+    if (ch === '\n') {
+      this.line++;
+      this.column = 1;
+    } else {
+      this.column++;
+    }
+    return ch;
+  }
+
+
+  match(expected) {
+    if (this.isAtEnd()) return false;
+    if (this.input[this.pos] !== expected) return false;
+    this.pos++;
+    this.column++;
+    return true;
+  }
+
+
+  skipWhitespaceAndComments() {
+    while (!this.isAtEnd()) {
+      const ch = this.peek();
+
+
+      // Whitespace
+      if (ch === ' ' || ch === '\t' || ch === '\r' || ch === '\n') {
+        this.advance();
+        continue;
+      }
+
+
+      // Line comment //
+      if (ch === '/' && this.pos + 1 < this.length && this.input[this.pos + 1] === '/') {
+        this.advance(); // '/'
+        this.advance(); // '/'
+        while (!this.isAtEnd() && this.peek() !== '\n') {
+          this.advance();
+        }
+        continue;
+      }
+
+
+      // Block comment /* ... */
+      if (ch === '/' && this.pos + 1 < this.length && this.input[this.pos + 1] === '*') {
+        this.advance(); // '/'
+        this.advance(); // '*'
+        while (!this.isAtEnd()) {
+          const c = this.advance();
+          if (c === '*' && !this.isAtEnd() && this.peek() === '/') {
+            this.advance(); // '/'
+            break;
+          }
+        }
+        continue;
+      }
+
+
+      // Not whitespace/comment, stop here
+      break;
+    }
+  }
+
+
+  isLetter(ch) {
+    return (ch >= 'A' && ch <= 'Z') ||
+           (ch >= 'a' && ch <= 'z') ||
+            ch === '_' ;
+  }
+
+
+  isLetterOrDigitOrExtra(ch) {
+    return this.isLetter(ch) ||
+           (ch >= '0' && ch <= '9') ||
+           ch === '_' || ch === '.' || ch === '-';
+  }
+
+
+  isDigit(ch) {
+    return ch >= '0' && ch <= '9';
+  }
+
+
+  readIdentifierOrKeyword() {
+    const startLine = this.line;
+    const startCol = this.column;
+    let text = "";
+
+
+    while (!this.isAtEnd() && this.isLetterOrDigitOrExtra(this.peek())) {
+      text += this.advance();
+    }
+
+
+    // Keyword matching is case-sensitive here, but you can
+    // normalize if you want.
+    switch (text) {
+      case "quipu":           return new Token(TokenType.KW_QUIPU, text, startLine, startCol);
+      case "strand":          return new Token(TokenType.KW_STRAND, text, startLine, startCol);
+      case "knot":            return new Token(TokenType.KW_KNOT, text, startLine, startCol);
+
+
+      case "model":           return new Token(TokenType.KW_MODEL, text, startLine, startCol);
+      case "type":            return new Token(TokenType.KW_TYPE, text, startLine, startCol);
+      case "context":         return new Token(TokenType.KW_CONTEXT, text, startLine, startCol);
+      case "context_fn":      return new Token(TokenType.KW_CONTEXT_FN, text, startLine, startCol);
+      case "prompt_sources":  return new Token(TokenType.KW_PROMPT_SOURCES, text, startLine, startCol);
+      case "prompt_fn":       return new Token(TokenType.KW_PROMPT_FN, text, startLine, startCol);
+      case "response_fn":     return new Token(TokenType.KW_RESPONSE_FN, text, startLine, startCol);
+      case "force_json":      return new Token(TokenType.KW_FORCE_JSON, text, startLine, startCol);
+
+
+      case "true":            return new Token(TokenType.KW_TRUE, text, startLine, startCol);
+      case "false":           return new Token(TokenType.KW_FALSE, text, startLine, startCol);
+
+
+      case "FOR":             return new Token(TokenType.KW_FOR, text, startLine, startCol);
+
+
+      case "SENDS_RESPONSE_TO":
+        return new Token(TokenType.KW_SENDS_RESPONSE_TO, text, startLine, startCol);
+      case "GETS_CONTEXT_FROM":
+        return new Token(TokenType.KW_GETS_CONTEXT_FROM, text, startLine, startCol);
+      case "USES_FUNCTION_ON_PROMPT_SOURCE":
+        return new Token(TokenType.KW_USES_FN_PROMPT, text, startLine, startCol);
+      case "USES_FUNCTION_ON_CONTEXT_SOURCE":
+        return new Token(TokenType.KW_USES_FN_CONTEXT, text, startLine, startCol);
+      case "USES_FUNCTION_ON_RESPONSE":
+        return new Token(TokenType.KW_USES_FN_RESPONSE, text, startLine, startCol);
+
+
+      default:
+        // Fallback: treat as generic identifier (model names, function ids, Knot_Type names)
+        return new Token(TokenType.IDENTIFIER, text, startLine, startCol);
+    }
+  }
+
+
+  readNumber() {
+    const startLine = this.line;
+    const startCol = this.column;
+    let text = "";
+    while (!this.isAtEnd() && this.isDigit(this.peek())) {
+      text += this.advance();
+    }
+    return new Token(TokenType.INTEGER, text, startLine, startCol);
+  }
+
+
+  nextToken() {
+    this.skipWhitespaceAndComments();
+
+
+    if (this.isAtEnd()) {
+      return new Token(TokenType.EOF, "", this.line, this.column);
+    }
+
+
+    const ch = this.peek();
+    const startLine = this.line;
+    const startCol = this.column;
+
+
+    // Single-character tokens
+    switch (ch) {
+      case '{':
+        this.advance();
+        return new Token(TokenType.LBRACE, "{", startLine, startCol);
+      case '}':
+        this.advance();
+        return new Token(TokenType.RBRACE, "}", startLine, startCol);
+      case ':':
+        this.advance();
+        return new Token(TokenType.COLON, ":", startLine, startCol);
+      case ';':
+        this.advance();
+        return new Token(TokenType.SEMICOLON, ";", startLine, startCol);
+      case ',':
+        this.advance();
+        return new Token(TokenType.COMMA, ",", startLine, startCol);
+      case '*':
+        this.advance();
+        return new Token(TokenType.STAR, "*", startLine, startCol);
+      default:
+        break;
+    }
+
+
+    // Identifier or keyword?
+    if (this.isLetter(ch)) {
+      return this.readIdentifierOrKeyword();
+    }
+
+
+    // Number literal?
+    if (this.isDigit(ch)) {
+      return this.readNumber();
+    }
+
+
+    // If we get here, it's an unexpected character
+    throw new Error(
+      `Unexpected character '${ch}' at ${this.line}:${this.column}`
+    );
+  }
+
+
+  // Helper: lex everything at once
+  tokenizeAll() {
+    const tokens = [];
+    let tok;
+    do {
+      tok = this.nextToken();
+      tokens.push(tok);
+    } while (tok.type !== TokenType.EOF);
+    return tokens;
+  }
+}
+
+
+4.1 Example usage
+import { QDLLexer } from "./qdl-lexer.js";
+
+
+const source = `
+quipu 0 {
+  strand 0 {
+    knot 0,0,0 {
+      model: llama3;
+      type: USER_PROMPT_NO_CONTEXT;
+    }
+
+
+    knot 1,0,0 {
+      model: llama3;
+    }
+  }
+}
+
+
+0,0,0 SENDS_RESPONSE_TO 1,0,0;
+0,0,0 USES_FUNCTION_ON_RESPONSE *extractCodeBlocks;
+`;
+
+
+const lexer = new QDLLexer(source);
+const tokens = lexer.tokenizeAll();
+console.log(tokens.map(t => t.toString()).join("\n"));
+
+
+That should give you a nice debug dump like:
+KW_QUIPU(quipu)@2:1
+INTEGER(0)@2:7
+LBRACE({)@2:9
+KW_STRAND(strand)@3:3
+INTEGER(0)@3:10
+...
+KW_SENDS_RESPONSE_TO(SENDS_RESPONSE_TO)@14:8
+...
+EOF()@...
+
+
+________________
+
+
+If you’d like, the next natural step is:
+      * A small recursive‑descent parser over these tokens that builds an AST and then:
+      * Instantiates Quipu, Strand, and Knot objects directly, or
+      * Produces a JSON structure your existing fromJSON methods can consume.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<prompt>build A recursive‑descent parser over these tokens that builds an AST and then Instantiates Quipu, Strand, and Knot objects directly. 
+Note: that KW_CONTEXT will have value of KnotList  and KW_PROMPT_SOURCES will ahve value of KnotList 
+</prompt>
+
+
+Nice, this is where QDL becomes “real”. Let’s build:
+      1. A recursive‑descent parser over the lexer we already defined.
+      2. An AST structure for Quipus/Strands/Knots.
+      3. A function that instantiates actual Quipu, Strand, and Knot objects from that AST, using your existing data models.
+The parser will respect your note that:
+      * KW_CONTEXT → array of Knot addresses
+      * KW_PROMPT_SOURCES → array of Knot addresses
+I’ll assume you have the QDLLexer and TokenType from before, and the Quipu data model file (quipu-data-models.js) is already loaded in the page.
+________________
+
+
+1. AST Shapes (simple JS objects)
+We’ll keep the AST minimal and serializable:
+// AST node shapes (just for clarity)
+
+
+/**
+ * programAst = {
+ *   quipus: [ quipuAst, ... ],
+ *   relations: [ relationAst, ... ],
+ *   looseKnots: [ knotAst, ... ] // knots not inside strand blocks (optional)
+ * }
+ *
+ * quipuAst = {
+ *   id: number,
+ *   strands: [ strandAst, ... ],
+ *   knots: [ knotAst, ... ] // knots directly in quipu block (rare)
+ * }
+ *
+ * strandAst = {
+ *   quipuId: number,
+ *   id: number,
+ *   knots: [ knotAst, ... ]
+ * }
+ *
+ * knotAst = {
+ *   address: { k: number, s: number, q: number, text: string },
+ *   model: string | null,
+ *   type: string | null,
+ *   context: string[],        // array of KnotAddress strings "k,s,q"
+ *   promptSources: string[],  // array of KnotAddress strings "k,s,q"
+ *   contextFn: string | null,
+ *   promptFn: string | null,
+ *   responseFn: string | null,
+ *   forceJson: boolean | null
+ * }
+ *
+ * relationAst = {
+ *   kind: "SENDS_RESPONSE_TO" | "GETS_CONTEXT_FROM" |
+ *         "USES_FUNCTION_ON_PROMPT_SOURCE" |
+ *         "USES_FUNCTION_ON_CONTEXT_SOURCE" |
+ *         "USES_FUNCTION_ON_RESPONSE",
+ *   from: string,     // KnotAddress "k,s,q"
+ *   to: string | null,
+ *   fn: string | null
+ * }
+ */
+
+
+________________
+
+
+2. Recursive‑descent parser for QDL
+Save this as something like qdl-parser.js. It expects QDLLexer + TokenType from the lexer we already built.
+// qdl-parser.js
+
+
+// import { QDLLexer, TokenType } from "./qdl-lexer.js";
+
+
+class ParseError extends Error {}
+
+
+/**
+ * QDLParser
+ * Takes a QDLLexer, builds an AST for QDL.
+ */
+export class QDLParser {
+  constructor(lexer) {
+    this.lexer = lexer;
+    this.tokens = lexer.tokenizeAll();
+    this.current = 0;
+
+
+    // We'll store relation statements at the top level
+    this.relations = [];
+  }
+
+
+  // --- Core token helpers ---
+
+
+  peek() {
+    return this.tokens[this.current];
+  }
+
+
+  isAtEnd() {
+    return this.peek().type === TokenType.EOF;
+  }
+
+
+  check(type) {
+    if (this.isAtEnd()) return false;
+    return this.peek().type === type;
+  }
+
+
+  advance() {
+    if (!this.isAtEnd()) this.current++;
+    return this.tokens[this.current - 1];
+  }
+
+
+  match(...types) {
+    for (const t of types) {
+      if (this.check(t)) {
+        this.advance();
+        return true;
+      }
+    }
+    return false;
+  }
+
+
+  expect(type, message) {
+    if (this.check(type)) return this.advance();
+    const tok = this.peek();
+    throw new ParseError(
+      `${message} at line ${tok.line}, column ${tok.column}; found ${tok.type}`
+    );
+  }
+
+
+  // --- Top-level parse ---
+
+
+  parseProgram() {
+    const quipus = [];
+    const looseKnots = [];
+    this.relations = [];
+
+
+    while (!this.isAtEnd()) {
+      if (this.match(TokenType.KW_QUIPU)) {
+        quipus.push(this.parseQuipuDecl());
+      } else if (this.check(TokenType.KW_KNOT)) {
+        looseKnots.push(this.parseKnotDecl(null, null));
+      } else if (this.check(TokenType.INTEGER)) {
+        this.relations.push(this.parseRelationStmt());
+      } else if (this.check(TokenType.EOF)) {
+        break;
+      } else {
+        const tok = this.peek();
+        throw new ParseError(
+          `Unexpected token ${tok.type} at top-level (line ${tok.line}, col ${tok.column}).`
+        );
+      }
+    }
+
+
+    return {
+      quipus,
+      relations: this.relations,
+      looseKnots
+    };
+  }
+
+
+  // --- Quipu / Strand / Knot declarations ---
+
+
+  parseQuipuDecl() {
+    // We already consumed KW_QUIPU in parseProgram via match()
+    const idTok = this.expect(TokenType.INTEGER, "Expected quipu id (integer)");
+    const quipuId = parseInt(idTok.value, 10);
+
+
+    this.expect(TokenType.LBRACE, "Expected '{' after quipu id");
+
+
+    const strands = [];
+    const knots = [];
+
+
+    while (!this.check(TokenType.RBRACE) && !this.check(TokenType.EOF)) {
+      if (this.match(TokenType.KW_STRAND)) {
+        strands.push(this.parseStrandDecl(quipuId));
+      } else if (this.check(TokenType.KW_KNOT)) {
+        knots.push(this.parseKnotDecl(quipuId, null));
+      } else if (this.check(TokenType.INTEGER)) {
+        this.relations.push(this.parseRelationStmt());
+      } else {
+        const tok = this.peek();
+        throw new ParseError(
+          `Unexpected token ${tok.type} inside quipu block (line ${tok.line}, col ${tok.column}).`
+        );
+      }
+    }
+
+
+    this.expect(TokenType.RBRACE, "Expected '}' at end of quipu block");
+
+
+    return {
+      id: quipuId,
+      strands,
+      knots
+    };
+  }
+
+
+  parseStrandDecl(quipuId) {
+    // KW_STRAND was already consumed
+    const idTok = this.expect(TokenType.INTEGER, "Expected strand id (integer)");
+    const strandId = parseInt(idTok.value, 10);
+
+
+    this.expect(TokenType.LBRACE, "Expected '{' after strand id");
+
+
+    const knots = [];
+
+
+    while (!this.check(TokenType.RBRACE) && !this.check(TokenType.EOF)) {
+      if (this.check(TokenType.KW_KNOT)) {
+        knots.push(this.parseKnotDecl(quipuId, strandId));
+      } else {
+        const tok = this.peek();
+        throw new ParseError(
+          `Unexpected token ${tok.type} inside strand block (line ${tok.line}, col ${tok.column}).`
+        );
+      }
+    }
+
+
+    this.expect(TokenType.RBRACE, "Expected '}' at end of strand block");
+
+
+    return {
+      quipuId,
+      id: strandId,
+      knots
+    };
+  }
+
+
+  parseKnotDecl(quipuIdContext, strandIdContext) {
+    this.expect(TokenType.KW_KNOT, "Expected 'knot' keyword");
+
+
+    const addr = this.parseKnotAddress();
+
+
+    // Optional consistency checks between address and containing quipu/strand
+    if (quipuIdContext !== null && addr.q !== quipuIdContext) {
+      console.warn(
+        `Knot address quipuIndex (${addr.q}) does not match containing quipu (${quipuIdContext}).`
+      );
+    }
+    if (strandIdContext !== null && addr.s !== strandIdContext) {
+      console.warn(
+        `Knot address strandIndex (${addr.s}) does not match containing strand (${strandIdContext}).`
+      );
+    }
+
+
+    this.expect(TokenType.LBRACE, "Expected '{' after knot address");
+
+
+    const knotAst = {
+      address: addr,
+      model: null,
+      type: null,
+      context: [],
+      promptSources: [],
+      contextFn: null,
+      promptFn: null,
+      responseFn: null,
+      forceJson: null
+    };
+
+
+    while (!this.check(TokenType.RBRACE) && !this.check(TokenType.EOF)) {
+      const tok = this.peek();
+      switch (tok.type) {
+        case TokenType.KW_MODEL:
+          this.parseModelField(knotAst);
+          break;
+        case TokenType.KW_TYPE:
+          this.parseTypeField(knotAst);
+          break;
+        case TokenType.KW_CONTEXT:
+          this.parseContextField(knotAst);
+          break;
+        case TokenType.KW_CONTEXT_FN:
+          this.parseContextFnField(knotAst);
+          break;
+        case TokenType.KW_PROMPT_SOURCES:
+          this.parsePromptSourcesField(knotAst);
+          break;
+        case TokenType.KW_PROMPT_FN:
+          this.parsePromptFnField(knotAst);
+          break;
+        case TokenType.KW_RESPONSE_FN:
+          this.parseResponseFnField(knotAst);
+          break;
+        case TokenType.KW_FORCE_JSON:
+          this.parseForceJsonField(knotAst);
+          break;
+        default:
+          throw new ParseError(
+            `Unexpected token ${tok.type} in knot body at line ${tok.line}, col ${tok.column}`
+          );
+      }
+    }
+
+
+    this.expect(TokenType.RBRACE, "Expected '}' at end of knot body");
+
+
+    return knotAst;
+  }
+
+
+  // --- Fields ---
+
+
+  parseModelField(knotAst) {
+    this.expect(TokenType.KW_MODEL, "Expected 'model'");
+    this.expect(TokenType.COLON, "Expected ':' after 'model'");
+    const ident = this.expect(TokenType.IDENTIFIER, "Expected model identifier");
+    knotAst.model = ident.value;
+    this.expect(TokenType.SEMICOLON, "Expected ';' after model field");
+  }
+
+
+  parseTypeField(knotAst) {
+    this.expect(TokenType.KW_TYPE, "Expected 'type'");
+    this.expect(TokenType.COLON, "Expected ':' after 'type'");
+    const ident = this.expect(TokenType.IDENTIFIER, "Expected knot type identifier");
+    knotAst.type = ident.value;
+    this.expect(TokenType.SEMICOLON, "Expected ';' after type field");
+  }
+
+
+  // context: KnotList[; ...]
+  parseContextField(knotAst) {
+    this.expect(TokenType.KW_CONTEXT, "Expected 'context'");
+    this.expect(TokenType.COLON, "Expected ':' after 'context'");
+
+
+    const list = this.parseKnotList();
+    knotAst.context = list;
+  }
+
+
+  // context_fn: *fnName;
+  parseContextFnField(knotAst) {
+    this.expect(TokenType.KW_CONTEXT_FN, "Expected 'context_fn'");
+    this.expect(TokenType.COLON, "Expected ':' after 'context_fn'");
+    this.expect(TokenType.STAR, "Expected '*' before function id");
+    const ident = this.expect(TokenType.IDENTIFIER, "Expected function identifier");
+    knotAst.contextFn = ident.value;
+    this.expect(TokenType.SEMICOLON, "Expected ';' after context_fn field");
+  }
+
+
+  parsePromptSourcesField(knotAst) {
+    this.expect(TokenType.KW_PROMPT_SOURCES, "Expected 'prompt_sources'");
+    this.expect(TokenType.COLON, "Expected ':' after 'prompt_sources'");
+    const list = this.parseKnotList();
+    knotAst.promptSources = list;
+  }
+
+
+  parsePromptFnField(knotAst) {
+    this.expect(TokenType.KW_PROMPT_FN, "Expected 'prompt_fn'");
+    this.expect(TokenType.COLON, "Expected ':' after 'prompt_fn'");
+    this.expect(TokenType.STAR, "Expected '*' before function id");
+    const ident = this.expect(TokenType.IDENTIFIER, "Expected function identifier");
+    knotAst.promptFn = ident.value;
+    this.expect(TokenType.SEMICOLON, "Expected ';' after prompt_fn field");
+  }
+
+
+  parseResponseFnField(knotAst) {
+    this.expect(TokenType.KW_RESPONSE_FN, "Expected 'response_fn'");
+    this.expect(TokenType.COLON, "Expected ':' after 'response_fn'");
+    this.expect(TokenType.STAR, "Expected '*' before function id");
+    const ident = this.expect(TokenType.IDENTIFIER, "Expected function identifier");
+    knotAst.responseFn = ident.value;
+    this.expect(TokenType.SEMICOLON, "Expected ';' after response_fn field");
+  }
+
+
+  parseForceJsonField(knotAst) {
+    this.expect(TokenType.KW_FORCE_JSON, "Expected 'force_json'");
+    this.expect(TokenType.COLON, "Expected ':' after 'force_json'");
+    const tok = this.peek();
+    if (this.match(TokenType.KW_TRUE)) {
+      knotAst.forceJson = true;
+    } else if (this.match(TokenType.KW_FALSE)) {
+      knotAst.forceJson = false;
+    } else {
+      throw new ParseError(
+        `Expected 'true' or 'false' after force_json at line ${tok.line}, col ${tok.column}`
+      );
+    }
+    this.expect(TokenType.SEMICOLON, "Expected ';' after force_json field");
+  }
+
+
+  // --- KnotAddress and KnotList ---
+
+
+  parseKnotAddress() {
+    const kTok = this.expect(TokenType.INTEGER, "Expected knot index");
+    const k = parseInt(kTok.value, 10);
+
+
+    this.expect(TokenType.COMMA, "Expected ',' after knot index");
+
+
+    const sTok = this.expect(TokenType.INTEGER, "Expected strand index");
+    const s = parseInt(sTok.value, 10);
+
+
+    this.expect(TokenType.COMMA, "Expected ',' after strand index");
+
+
+    const qTok = this.expect(TokenType.INTEGER, "Expected quipu index");
+    const q = parseInt(qTok.value, 10);
+
+
+    const text = `${k},${s},${q}`;
+    return { k, s, q, text };
+  }
+
+
+  // KnotList uses semicolons as separators.
+  // Example: context: 0,0,0; 1,0,0;
+  // We'll parse addresses separated by ';', stopping when next token is not INTEGER.
+  parseKnotList() {
+    const list = [];
+    const first = this.parseKnotAddress();
+    list.push(first.text);
+
+
+    while (this.check(TokenType.SEMICOLON)) {
+      this.advance(); // consume ';'
+      // If another INTEGER follows, parse another KnotAddress; otherwise treat ';' as field terminator.
+      if (this.check(TokenType.INTEGER)) {
+        const addr = this.parseKnotAddress();
+        list.push(addr.text);
+      } else {
+        break;
+      }
+    }
+
+
+    // No extra ';' expected here; we've already consumed them.
+    return list;
+  }
+
+
+  // --- Relation statements ---
+
+
+  isRelationKeyword(type) {
+    return (
+      type === TokenType.KW_SENDS_RESPONSE_TO ||
+      type === TokenType.KW_GETS_CONTEXT_FROM ||
+      type === TokenType.KW_USES_FN_PROMPT ||
+      type === TokenType.KW_USES_FN_CONTEXT ||
+      type === TokenType.KW_USES_FN_RESPONSE
+    );
+  }
+
+
+  parseRelationStmt() {
+    const fromAddr = this.parseKnotAddress();
+    const relTok = this.peek();
+
+
+    if (!this.isRelationKeyword(relTok.type)) {
+      throw new ParseError(
+        `Expected relation keyword after KnotAddress, found ${relTok.type} at line ${relTok.line}, col ${relTok.column}`
+      );
+    }
+
+
+    const kindToken = this.advance();
+    let relation = null;
+
+
+    switch (kindToken.type) {
+      case TokenType.KW_SENDS_RESPONSE_TO: {
+        const toAddr = this.parseKnotAddress();
+        this.expect(TokenType.SEMICOLON, "Expected ';' after SENDS_RESPONSE_TO statement");
+        relation = {
+          kind: "SENDS_RESPONSE_TO",
+          from: fromAddr.text,
+          to: toAddr.text,
+          fn: null
+        };
+        break;
+      }
+      case TokenType.KW_GETS_CONTEXT_FROM: {
+        const toAddr = this.parseKnotAddress();
+        this.expect(TokenType.SEMICOLON, "Expected ';' after GETS_CONTEXT_FROM statement");
+        relation = {
+          kind: "GETS_CONTEXT_FROM",
+          from: fromAddr.text,
+          to: toAddr.text,
+          fn: null
+        };
+        break;
+      }
+      case TokenType.KW_USES_FN_PROMPT: {
+        this.expect(TokenType.STAR, "Expected '*' before function id");
+        const fnIdTok = this.expect(TokenType.IDENTIFIER, "Expected function identifier");
+        this.expect(TokenType.KW_FOR, "Expected 'FOR' after function id");
+        const targetAddr = this.parseKnotAddress();
+        this.expect(
+          TokenType.SEMICOLON,
+          "Expected ';' after USES_FUNCTION_ON_PROMPT_SOURCE statement"
+        );
+        relation = {
+          kind: "USES_FUNCTION_ON_PROMPT_SOURCE",
+          from: fromAddr.text,
+          to: targetAddr.text,
+          fn: fnIdTok.value
+        };
+        break;
+      }
+      case TokenType.KW_USES_FN_CONTEXT: {
+        this.expect(TokenType.STAR, "Expected '*' before function id");
+        const fnIdTok = this.expect(TokenType.IDENTIFIER, "Expected function identifier");
+        this.expect(TokenType.KW_FOR, "Expected 'FOR' after function id");
+        const targetAddr = this.parseKnotAddress();
+        this.expect(
+          TokenType.SEMICOLON,
+          "Expected ';' after USES_FUNCTION_ON_CONTEXT_SOURCE statement"
+        );
+        relation = {
+          kind: "USES_FUNCTION_ON_CONTEXT_SOURCE",
+          from: fromAddr.text,
+          to: targetAddr.text,
+          fn: fnIdTok.value
+        };
+        break;
+      }
+      case TokenType.KW_USES_FN_RESPONSE: {
+        this.expect(TokenType.STAR, "Expected '*' before function id");
+        const fnIdTok = this.expect(TokenType.IDENTIFIER, "Expected function identifier");
+        this.expect(
+          TokenType.SEMICOLON,
+          "Expected ';' after USES_FUNCTION_ON_RESPONSE statement"
+        );
+        relation = {
+          kind: "USES_FUNCTION_ON_RESPONSE",
+          from: fromAddr.text,
+          to: null,
+          fn: fnIdTok.value
+        };
+        break;
+      }
+      default:
+        throw new ParseError("Unknown relation keyword");
+    }
+
+
+    return relation;
+  }
+}
+
+
+________________
+
+
+3. Instantiating real Quipu, Strand, and Knot objects
+Now we take the AST from parser.parseProgram() and actually build live objects using your existing classes.
+Key points:
+      * We maintain maps from DSL IDs to runtime RegIds.
+      * We fill Strand.knots[] with Knot.RegId at the correct knotIndex.
+      * For each knot, we set:
+      * knot.knotType
+      * knot.sourceContextKnotIds
+      * knot.sourcePromptKnotIds
+      * knot.requestCallbackId / responseCallbackId
+      * knot.forceJsonOutput
+      * The underlying LLM model via d3(knot.TC).model if d3 exists.
+We also apply relation statements to update prompt/context sources and callbacks.
+// qdl-instantiator.js
+// Assumes quipu-data-models.js is loaded so Quipu, Strand, Knot, etc exist. :contentReference[oaicite:3]{index=3}
+
+
+// programAst is the result of parser.parseProgram()
+export function instantiateProgram(programAst) {
+  const quipuMap = new Map();  // dslQuipuId -> Quipu instance
+  const strandMap = new Map(); // key `${quipuId}:${strandId}` -> Strand instance
+  const knotMap = new Map();   // KnotAddress text "k,s,q" -> Knot instance
+
+
+  // 1. Create Quipus and Strands
+  for (const qAst of programAst.quipus) {
+    const q = new Quipu(`QDL Quipu ${qAst.id}`);
+    quipuMap.set(qAst.id, q);
+
+
+    // Create strands
+    for (const sAst of qAst.strands) {
+      const strand = new Strand(
+        sAst.id,                       // positionOnQuipu
+        `Strand ${sAst.id}`,           // name
+        q.RegId                        // parent quipu
+      );
+      strandMap.set(`${qAst.id}:${sAst.id}`, strand);
+
+
+      // Attach strand to quipu like pushStrand() does
+      let summary = null;
+      if (typeof Two_Layer !== "undefined") {
+        summary = new Two_Layer("summary", `[Summary for Strand ${strand.RegId}]`);
+      }
+      q.strands.push({
+        strandRegId: strand.RegId,
+        summaryTwoLayerId: summary ? summary.RegId : null
+      });
+
+
+      // We'll add knots later
+    }
+  }
+
+
+  // 2. Helper to ensure a Knot exists at given address
+  function createOrGetKnot(knotAst) {
+    const addr = knotAst.address;
+    const addrText = addr.text;
+
+
+    if (knotMap.has(addrText)) {
+      return knotMap.get(addrText);
+    }
+
+
+    const qAstId = addr.q;
+    const sAstId = addr.s;
+    const q = quipuMap.get(qAstId);
+    const strand = strandMap.get(`${qAstId}:${sAstId}`);
+    if (!q || !strand) {
+      throw new Error(
+        `No Quipu/Strand found for knot address ${addrText} (quipu=${qAstId}, strand=${sAstId}).`
+      );
+    }
+
+
+    const kIndex = addr.k;
+    const knot = new Knot(strand.RegId, kIndex);
+
+
+    // Ensure strand.knots[] is large enough and place this knot at correct index
+    while (strand.knots.length <= kIndex) {
+      strand.knots.push(null);
+      strand.workbitmap.push(false);
+    }
+    strand.knots[kIndex] = knot.RegId;
+
+
+    knotMap.set(addrText, knot);
+    return knot;
+  }
+
+
+  // 3. Create Knot instances from AST under each strand
+  for (const qAst of programAst.quipus) {
+    for (const sAst of qAst.strands) {
+      for (const kAst of sAst.knots) {
+        const knot = createOrGetKnot(kAst);
+        applyKnotAstToInstance(knot, kAst);
+      }
+    }
+
+
+    // Optionally, handle knots declared directly inside quipu blocks
+    for (const kAst of qAst.knots) {
+      const knot = createOrGetKnot(kAst);
+      applyKnotAstToInstance(knot, kAst);
+    }
+  }
+
+
+  // Also handle looseKnots (if you want that feature)
+  for (const kAst of programAst.looseKnots || []) {
+    const knot = createOrGetKnot(kAst);
+    applyKnotAstToInstance(knot, kAst);
+  }
+
+
+  // 4. Apply relation statements
+  for (const rel of programAst.relations) {
+    const fromKnot = knotMap.get(rel.from);
+    if (!fromKnot) {
+      console.warn(`Relation from unknown knot ${rel.from}`);
+      continue;
+    }
+
+
+    switch (rel.kind) {
+      case "SENDS_RESPONSE_TO": {
+        const toKnot = knotMap.get(rel.to);
+        if (!toKnot) {
+          console.warn(`Relation SENDS_RESPONSE_TO unknown target ${rel.to}`);
+          break;
+        }
+        toKnot.sourcePromptKnotIds.push(rel.from);
+        break;
+      }
+      case "GETS_CONTEXT_FROM": {
+        const toKnot = knotMap.get(rel.to);
+        if (!toKnot) {
+          console.warn(`Relation GETS_CONTEXT_FROM unknown target ${rel.to}`);
+          break;
+        }
+        fromKnot.sourceContextKnotIds.push(rel.to);
+        break;
+      }
+      case "USES_FUNCTION_ON_PROMPT_SOURCE": {
+        const targetKnot = knotMap.get(rel.to);
+        if (!targetKnot) {
+          console.warn(`Relation USES_FUNCTION_ON_PROMPT_SOURCE unknown target ${rel.to}`);
+          break;
+        }
+        targetKnot.requestCallbackId = rel.fn;
+        targetKnot.sourcePromptKnotIds.push(rel.from);
+        break;
+      }
+      case "USES_FUNCTION_ON_CONTEXT_SOURCE": {
+        const targetKnot = knotMap.get(rel.to);
+        if (!targetKnot) {
+          console.warn(`Relation USES_FUNCTION_ON_CONTEXT_SOURCE unknown target ${rel.to}`);
+          break;
+        }
+        targetKnot.requestCallbackId = rel.fn;
+        targetKnot.sourceContextKnotIds.push(rel.from);
+        break;
+      }
+      case "USES_FUNCTION_ON_RESPONSE": {
+        fromKnot.responseCallbackId = rel.fn;
+        break;
+      }
+      default:
+        console.warn(`Unknown relation kind: ${rel.kind}`);
+    }
+  }
+
+
+  // Return mapping in case caller wants to know
+  return {
+    quipus: Array.from(quipuMap.values()),
+    quipuMap,
+    strandMap,
+    knotMap
+  };
+}
+
+
+// Map AST fields onto a Knot instance
+function applyKnotAstToInstance(knot, kAst) {
+  if (kAst.type) {
+    knot.knotType = kAst.type;
+  }
+  if (Array.isArray(kAst.context) && kAst.context.length > 0) {
+    knot.sourceContextKnotIds = kAst.context.slice();
+  }
+  if (Array.isArray(kAst.promptSources) && kAst.promptSources.length > 0) {
+    knot.sourcePromptKnotIds = kAst.promptSources.slice();
+  }
+
+
+  // request callback: choose promptFn, then contextFn if present
+  if (kAst.promptFn) {
+    knot.requestCallbackId = kAst.promptFn;
+  } else if (kAst.contextFn) {
+    knot.requestCallbackId = kAst.contextFn;
+  }
+
+
+  if (kAst.responseFn) {
+    knot.responseCallbackId = kAst.responseFn;
+  }
+
+
+  if (typeof kAst.forceJson === "boolean") {
+    knot.forceJsonOutput = kAst.forceJson;
+  }
+
+
+  // Set model on associated Three_Cell if infrastructure is present
+  if (kAst.model && typeof d3 === "function") {
+    const threeCell = d3(knot.TC);
+    if (threeCell) {
+      threeCell.model = kAst.model;
+    }
+  }
+}
+
+
+________________
+
+
+4. Example usage
+import { QDLLexer } from "./qdl-lexer.js";
+import { QDLParser } from "./qdl-parser.js";
+import { instantiateProgram } from "./qdl-instantiator.js";
+
+
+const source = `
+quipu 0 {
+  strand 0 {
+    knot 0,0,0 {
+      model: llama3;
+      type: USER_PROMPT_NO_CONTEXT;
+    }
+
+
+    knot 1,0,0 {
+      model: llama3;
+      prompt_sources: 0,0,0;
+      prompt_fn: *mergeAndInterpolate;
+    }
+  }
+}
+
+
+0,0,0 USES_FUNCTION_ON_RESPONSE *extractCodeBlocks;
+`;
+
+
+const lexer = new QDLLexer(source);
+const parser = new QDLParser(lexer);
+const ast = parser.parseProgram();
+const { quipus, knotMap } = instantiateProgram(ast);
+
+
+console.log("Instantiated quipus:", quipus);
+console.log("Knot 0,0,0 instance:", knotMap.get("0,0,0"));
+
+
+      * quipus[0] is a live Quipu instance, registered in QuipuArray.
+      * Its first strand holds two real Knot objects whose sourcePromptKnotIds, callbacks, and models are all wired from QDL.
+________________
+
+
+If you’d like, I can next:
+      * Add error‑recovery (instead of throwing immediately).
+      * Add support for executionStrategy / startKnotAddress at the Quipu level.
+      * Or add a reverse path: emit QDL from existing Quipu objects (a textual toQDL() writer).

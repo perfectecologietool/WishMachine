@@ -1,0 +1,82 @@
+================================================================================
+          SEVEN_WISH ARCHITECTURE & WISH DECLARATIVE LANGUAGE (WDL)
+================================================================================
+
+1. THE UNIFIED ADDRESSING SYSTEM (RegId Vector)
+--------------------------------------------------------------------------------
+The historical Quipu model relied on positional counts (e.g., cellIndex, 
+strandIndex) and polymorphic array overrides to identify elements. The new 
+architecture discards implicit array positions in favor of explicit relationships
+using the Global "RegId" (Registry ID) system mapping up the hierarchy. 
+
+The core atomic execution unit is the `Knot`. Every Knot maintains a direct 
+reference to its host `Four_Row` via `.parentTrackId`. 
+
+To locate a Knot's exact absolute coordinate within the application state, it 
+traverses the pointer chain upwards:
+Knot (.parentTrackId) -> Four_Row (.parentChoiceId) -> Five_Choice (.parentPlanId)
+-> Six_Plan (.parentWishId) -> Seven_Wish.
+
+This yields a 5-dimensional Address Vector for any Knot in existence:
+ADDRESS = [d7_id, d6_id, d5_id, d4_id, k1_id]
+
+Where:
+ - d7: SevenWishArray index
+ - d6: SixPlanArray index
+ - d5: FiveChoiceArray index
+ - d4: FourRowArray index
+ - k1: KnotArray index
+
+This guarantees extremely fast O(1) lookups and completely decouples the Knot's
+execution timeline from its visual position in the layout table.
+
+
+2. WISH DECLARATIVE LANGUAGE (WDL) PROPOSAL
+--------------------------------------------------------------------------------
+Previously, QDL (Quipu Declaration Language) was designed to quickly draft 
+linear Strands. With the introduction of the Seven_Wish multi-dimensional 
+decision tree, we must evolve QDL into the "Wish Declarative Language" (WDL).
+
+WDL provides a human-readable text syntax that the WDL Engine can compile down 
+into the [d7, d6, d5, d4, k1] struct arrays.
+
+### WDL SYNTAX DESIGN:
+
+A WDL script uses precise keywords (Wish, Plan, Choice, Row, Knot) mapped with 
+indentation or scope blocks to define the hierarchy. 
+
+```wdl
+WISH: "WDL Context Wiring Test"
+  DIAGNOSIS:
+    CHOICE: "Initialization"
+      ROW: "Action Branch 1"
+        KNOT:
+          TYPE: "USER_PROMPT_NO_CONTEXT"
+          FORCE_JSON: true
+          PROMPT: "Please provide a JSON object containing a 'greeting' property."
+        KNOT:
+          TYPE: "USER_PROMPT_OTHER_KNOT_HISTORY"
+          CONTEXT_SOURCE: "0,0,0,0,0"
+          PROMPT_SOURCE: "0,0,0,0,0"
+          PROMPT_FN: "INPUTinterpolateTemplate"
+          RESPONSE_FN: "extractCodeBlocks"
+          PROMPT: "Extract the greeting from the previous step and write it inside a Python script."
+```
+
+### PROPOSED COMPILER LOGIC (WDL -> RegId Arrays)
+When the user pastes the WDL script into the parser:
+
+1. WDL recognizes `WISH:` and executes `const w = new Seven_Wish("...")`. (Yields d7).
+2. WDL recognizes `PLAN:` and maps it to `const w = new Six_Plan(...)`. 
+2.a WDL recognizes `DIAGNOSIS:` as `w.decomposition` (d6)
+2.b WDL recognizes `PROGNOSIS:` as `w.recomposition` (d6). 
+3. WDL recognizes `CHOICE:` and executes `const c = new Five_Choice(...)`. It pushes `c.RegId` to the active `Six_Plan.steps[]`.
+4. WDL recognizes `ROW:` and executes `const r = new Four_Row(...)`. It calls `c.addBranch(r.RegId)`.
+5. WDL recognizes `KNOT:` and executes `const k = new window.KnotClass(r.RegId)`. It assigns the PROMPT/RESPONSE strings to the underlying `Three_Cell` via `k.TC`.
+
+This naturally builds the exact data structures required by `WishMachine.html` 
+to render the Dynamic Scenario Table immediately.
+
+### ADVANCED WDL FEATURES TO CONSIDER
+- **Metadata Tagging**: `KNOT [Strategy: DEPENDENCY_AWARE]:` to override the default linear execution.
+- **Reference Pointers**: Injecting `[DEPENDS_ON: d4_id]` directly into the text to stitch parallel tracks together safely.

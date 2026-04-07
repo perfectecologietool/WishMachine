@@ -1,0 +1,36 @@
+The Seven_Wish.decomposition is a Six_Plan that is built by the `Decomposition phase` which is a recursive creation of LLM conversation Turns due to previous turns.
+The Seven_Wish.recomposition is a Six_Plan that is built by the `recomposition phase` which is a graph traversal of the Seven_Wish.decomposition in reverse. 
+  
+1.a) For Decomposition phase of the Seven_Wish pipeline, 
+The Five_Choice needs to be 'extended' to be a Five_Parallel. 
+The Five_Parallel.branches is an array of Four_Row elements. 
+Each Five_Parallel.branches[i] is independent of Five_parallel.branches[0:i-1] and Five_Parallel.branches[i+1:n] 
+So the Five_Parallel is the root of its own unique subtree. 
+The Five_Parallel is the type of Four_Row.terminating_Choice (Five_Parallel extends Five_Choice) . 
+The Five_Parallel should be declared in the Wish.js or tableModels.js 
+
+When a Dynamic_Scenario_Table displays the Six_Plan, the Five_Choice and Five_Parallel doesn't change how rendering occurs on the UI's DOM table. Each Row still represents a Four_Row. Each Cell still represents a Hyper_Three_Cell. The Five_Parallel is rendered exactly like the Five_Choice, except for the input radio element , so the Five_Parallel.yeildElement() function overloads the Five_Choice.yeildElement() function. 
+
+This means that The Coalesce engine works differently for a Five_Parallel than it works for a Five_Choice. 
+The Five_Choice.selectedBranchId is the index of the element in Five_Choice.branches that is to be traversed by the Coalescence. 
+We can see this in the subroutine `traverse` within the function `coalesceScenarioToPlan` in the tableRenderer.js 
+`traverse` is recursively called, such that a single path is traced from root to leaf, within the Six_Plan tree of Five_Choice nodes and their Four_Row edges. 
+
+To execute a Six_Plan populated with Five_Parallel used as Four_Row.terminatingChoice and Four_Row.parentChoice, we can rely on the 2-dimensional layout of the Dynamic_Scenario_Table because each Four_Row of the Seven_Wish.Decomposition is guaranteed to contain only Hyper_Three_Cell. 
+An alternative and more Robust Method, is to associate an ArchNode graph node with every Four_Row;
+Every Four_Row that has a Four_Row.terminatingChoice == Five_Parallel , asserts that Four_Row.is_a_parent_System == true; The corollary is that Four_Row.terminatingChoice == null, asserts that Four_Row.is_a_Leaf_node == true; is_a_Leaf_node = !(is_a_parent_System);  
+Infact, We can say that Four_Component extends {Four_Row, ArchNode} , but since Javascript can not pass inheritance from multiple classes, Four_Component extends Four_Row {ArchNode.members merges into Four_Component; ArchNode.functions merges into Four_Component;}
+ 
+
+Given the 2-dimensional Table element, we can Execute every Hyper_Three_Cell in a column, before moving on to the next column of the Dynamic_Scenario_Table. This is the same as Executing every ArchNode's Four_Row (or Four_Component) within a certain depth from the root. 
+
+Now that we have the structure explained, we need to explain the momenta of how the Six_Plan is created on the fly. 
+We use a recursive Function processingCallbacks["WDLsensibleRecursiveDecomposition"] who takes a parameter called `parsedJsonObj` that contains the necessary information to create the next set of Hyper_Three_Cell instances. 
+The User types in a 'topic' and the topic ~= parsedJsonObj.noun ; 
+We need to create a function similar to  _setupDecompQuipuFromSeed()  which uses a Hyper_Three_Cell within the Six_Plan that is Seven_Wish.Decomposition ; 
+Because the first Hyper_Three_Cell  has its Hyper_Three_Cell.responseCallbackId = "WDLsensibleRecursiveDecomposition" ,  when the Hyper_Three_Cell is executed it starts the recursive generation and execution of Hyper_Three_Cell(a.k.a Knot) , Four_Component (a.k.a Four_Row or Strand), and Five_Parallel (a.k.a Five_Choice)  . 
+
+The function needs a limit just as was used in ``` window.decomp_strand_limit = 1024;``` 
+
+Once this limit is reached, or only leaf nodes are at the bottom of the Six_plan tree, then Decomposition is finished. 
+

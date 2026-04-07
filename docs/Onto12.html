@@ -1,0 +1,864 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Causal Graph Builder</title>
+    <style>
+        :root {
+            --bg-color: #f4f7f6;
+            --card-bg: #ffffff;
+            --primary-color: #0d47a1;
+            --secondary-color: #1565c0;
+            --text-color: #333;
+            --border-color: #e0e0e0;
+            --header-color: #002171;
+            --label-color: #555;
+            --input-bg: #fdfdfd;
+            --analysis-bg: #e8f5e9;
+            --analysis-border: #4caf50;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            margin: 0;
+            padding: 20px;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 20px;
+        }
+        @media (min-width: 1000px) {
+            .container { grid-template-columns: repeat(2, 1fr); }
+            .full-width { grid-column: 1 / -1; }
+        }
+        .card {
+            background-color: var(--card-bg);
+            border-radius: 12px;
+            padding: 25px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+            border: 1px solid var(--border-color);
+            display: flex;
+            flex-direction: column;
+        }
+        .card > *:last-child {
+            margin-top: auto;
+        }
+        h1, h2 {
+            color: var(--header-color);
+            border-bottom: 2px solid var(--primary-color);
+            padding-bottom: 10px;
+            margin-top: 0;
+        }
+        h1 { text-align: center; }
+        label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+            color: var(--label-color);
+        }
+        input[type="text"], input[type="number"], select, textarea {
+            width: 100%;
+            padding: 12px;
+            margin-bottom: 15px;
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            box-sizing: border-box;
+            background-color: var(--input-bg);
+            font-size: 16px;
+        }
+        select[multiple] {
+            min-height: 150px;
+        }
+        button {
+            background: linear-gradient(45deg, var(--secondary-color), var(--primary-color));
+            color: white;
+            border: none;
+            padding: 12px 20px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: 600;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 15px rgba(0,0,0,0.15);
+        }
+        textarea {
+            background-color: #2d2d2d;
+            color: #f0f0f0;
+            font-family: 'Fira Code', 'Courier New', monospace;
+            font-size: 14px;
+            min-height: 300px;
+        }
+        .grid-2 {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+        }
+        .grid-3 {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 15px;
+        }
+        .info-box {
+            background-color: #e3f2fd;
+            border-left: 5px solid var(--secondary-color);
+            padding: 15px;
+            margin-bottom: 20px;
+            border-radius: 0 8px 8px 0;
+        }
+        .button-group {
+            display: flex;
+            gap: 10px;
+            margin-top: 10px;
+        }
+        .ontology-display-container {
+            margin-top: 25px;
+            border-top: 1px solid var(--border-color);
+            padding-top: 20px;
+        }
+        .ontology-display-container ol { padding-left: 20px; }
+        .ontology-display-container > ol > li {
+            background-color: #f9f9f9;
+            border: 1px solid #eee;
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 15px;
+        }
+        .ontology-display-container h3 { margin: 0 0 10px 0; color: var(--primary-color); }
+        .ontology-display-container h4 { margin: 10px 0 5px 0; color: var(--secondary-color); font-size: 1em; }
+        .ontology-display-container ul { list-style-type: disc; padding-left: 20px; margin: 0; }
+
+        .analysis-card {
+            background-color: var(--analysis-bg);
+            border-color: var(--analysis-border);
+        }
+        .analysis-card h2 {
+            border-bottom-color: var(--analysis-border);
+        }
+        #analysis-results {
+            background-color: #333;
+            color: #fff;
+            min-height: 200px;
+            white-space: pre-wrap;
+            padding: 15px;
+            border-radius: 8px;
+        }
+        /* Class to hide elements */
+        .hidden {
+            display: none;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <h1 class="full-width">Causal Knowledge Graph Builder</h1>
+
+        <!-- ONTOLOGY MANAGEMENT -->
+        <div class="card full-width">
+            <h2>1. Ontology Management</h2>
+            <div class="grid-2">
+                <div>
+                    <label for="new-ontology-name">Create New Ontology</label>
+                    <input type="text" id="new-ontology-name" placeholder="e.g., Physics">
+                    <button id="add-ontology-btn">Create Ontology</button>
+                </div>
+                <div>
+                    <label for="ontology-selector">Select Active Ontology</label>
+                    <select id="ontology-selector"></select>
+                </div>
+            </div>
+            <hr style="margin: 20px 0;">
+            <div class="grid-2">
+                 <div>
+                    <label for="new-concept">Add Concept to Active Ontology</label>
+                    <input type="text" id="new-concept" placeholder="e.g., Pollen">
+                    <button id="add-concept-btn">Add Concept</button>
+                </div>
+                <div>
+                    <label for="new-predicate">Add Predicate to Active Ontology</label>
+                    <div class="grid-2">
+                        <input type="text" id="new-predicate" placeholder="e.g., TRIGGERS">
+                        <select id="predicate-type">
+                            <option value="triplet">Triplet Predicate</option>
+                            <option value="hop">Hop Predicate</option>
+                            <option value="spatial">Spatial Predicate</option>
+                        </select>
+                    </div>
+                    <button id="add-predicate-btn">Add Predicate</button>
+                </div>
+            </div>
+            <div id="ontology-display-container" class="ontology-display-container"></div>
+        </div>
+
+        <!-- EVENT CREATION -->
+        <div class="card">
+            <h2>2. Create an Event (Proposition)</h2>
+            <div class="info-box">An Event is a contextualized triplet: a statement of fact at a specific time and place.</div>
+            <div class="grid-3">
+                <div><label>Source</label><select id="event-source"></select></div>
+                <div><label>Predicate</label><select id="event-predicate-triplet"></select></div>
+                <!-- Target container for switching between select and input -->
+                <div id="event-target-container">
+                    <label>Target</label>
+                    <select id="event-target"></select>
+                    <input type="number" id="event-target-number" class="hidden" value="0">
+                </div>
+            </div>
+            <div class="grid-2">
+                <div>
+                    <label>Space</label>
+                    <select id="event-predicate-spatial"></select>
+                    <select id="event-space-concept"></select>
+                </div>
+                 <div>
+                    <label>Time</label>
+                    <select id="event-predicate-temporal"></select>
+                    <select id="event-time-concept"></select>
+                </div>
+            </div>
+            <label for="event-provenance">Provenance</label>
+            <select id="event-provenance">
+                <option value="textbook">Textbook</option>
+                <option value="government">Government</option>
+                <option value="deduction">Deduction</option>
+            </select>
+            <button id="add-event-btn">Create Event</button>
+        </div>
+
+        <!-- HOP CREATION -->
+        <div class="card">
+            <h2>3. Create a Hop (Hyperedge)</h2>
+            <div class="info-box">A Hop connects source Events to target Events, forming an inference step.</div>
+            <div class="grid-2">
+                <div>
+                    <label for="hop-sources">Source Event(s) (Ctrl+Click)</label>
+                    <select id="hop-sources" multiple></select>
+                </div>
+                <div>
+                    <label for="hop-targets">Target Event(s) (Ctrl+Click)</label>
+                    <select id="hop-targets" multiple></select>
+                </div>
+            </div>
+            <label for="hop-predicate">Hop Predicate</label>
+            <select id="hop-predicate"></select>
+            <label>Hop Time Interval</label>
+            <div class="grid-2">
+                <select id="hop-time-predicate"></select>
+                <select id="hop-time-concept"></select>
+            </div>
+            <button id="add-hop-btn">Create Hop</button>
+        </div>
+
+        <!-- PATH MANAGEMENT -->
+        <div class="card full-width">
+            <h2>4. Assemble a Path</h2>
+            <div class="info-box">A Path is an ordered sequence of Hops, forming a complete argument or causal chain.</div>
+            <div class="grid-3">
+                <div>
+                    <label for="new-path-name">Create New Path</label>
+                    <input type="text" id="new-path-name" placeholder="e.g., Allergic Reaction">
+                    <button id="add-path-btn">Create Path</button>
+                </div>
+                <div>
+                    <label for="path-selector">Select Active Path</label>
+                    <select id="path-selector"></select>
+                </div>
+                <div>
+                    <label for="path-hop-selector">Select Hop to Add</label>
+                    <select id="path-hop-selector"></select>
+                    <button id="add-hop-to-path-btn">Add Hop to Path</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- ANALYSIS SECTION -->
+        <div class="card full-width analysis-card">
+            <h2>5. Graph Analysis & Inference</h2>
+            <div class="grid-3">
+                <div>
+                    <label for="analysis-concept">Coalesce Hypernode</label>
+                    <select id="analysis-concept"></select>
+                    <button id="run-coalescence-btn">Find All Paths</button>
+                </div>
+                <div>
+                    <label for="analysis-prognosis-start">Prognosis (Forward Chain)</label>
+                    <select id="analysis-prognosis-start"></select>
+                    <button id="run-prognosis-btn">Predict What's Next</button>
+                </div>
+                <div>
+                    <label for="analysis-diagnosis-end">Diagnosis (Backward Chain)</label>
+                    <select id="analysis-diagnosis-end"></select>
+                    <button id="run-diagnosis-btn">Find Root Causes</button>
+                </div>
+            </div>
+            <label for="analysis-results" style="margin-top: 20px;">Analysis Results</label>
+            <pre id="analysis-results">Run an analysis to see results here.</pre>
+        </div>
+        
+        <!-- DATA DISPLAY & I/O -->
+        <div class="card full-width">
+            <h2>Knowledge Graph I/O</h2>
+            <textarea id="json-output" placeholder="Click 'Export' to see the current graph, or paste a graph here and click 'Import'."></textarea>
+            <div class="button-group">
+                <button id="export-btn">Export to Text Area</button>
+                <button id="import-btn">Import from Text Area</button>
+            </div>
+        </div>
+
+    </div>
+
+    <script>
+    document.addEventListener('DOMContentLoaded', () => {
+        // --- DOM ELEMENT REFERENCES ---
+        const dom = {
+            // Ontology
+            newOntologyName: document.getElementById('new-ontology-name'),
+            addOntologyBtn: document.getElementById('add-ontology-btn'),
+            ontologySelector: document.getElementById('ontology-selector'),
+            newConcept: document.getElementById('new-concept'),
+            addConceptBtn: document.getElementById('add-concept-btn'),
+            newPredicate: document.getElementById('new-predicate'),
+            predicateType: document.getElementById('predicate-type'),
+            addPredicateBtn: document.getElementById('add-predicate-btn'),
+            ontologyDisplayContainer: document.getElementById('ontology-display-container'),
+            // Event
+            eventSource: document.getElementById('event-source'),
+            eventPredicateTriplet: document.getElementById('event-predicate-triplet'),
+            eventTarget: document.getElementById('event-target'),
+            eventTargetNumber: document.getElementById('event-target-number'), // New
+            eventPredicateSpatial: document.getElementById('event-predicate-spatial'),
+            eventSpaceConcept: document.getElementById('event-space-concept'),
+            eventPredicateTemporal: document.getElementById('event-predicate-temporal'),
+            eventTimeConcept: document.getElementById('event-time-concept'),
+            eventProvenance: document.getElementById('event-provenance'),
+            addEventBtn: document.getElementById('add-event-btn'),
+            // Hop
+            hopSources: document.getElementById('hop-sources'),
+            hopTargets: document.getElementById('hop-targets'),
+            hopPredicate: document.getElementById('hop-predicate'),
+            hopTimePredicate: document.getElementById('hop-time-predicate'),
+            hopTimeConcept: document.getElementById('hop-time-concept'),
+            addHopBtn: document.getElementById('add-hop-btn'),
+            // Path
+            newPathName: document.getElementById('new-path-name'),
+            addPathBtn: document.getElementById('add-path-btn'),
+            pathSelector: document.getElementById('path-selector'),
+            pathHopSelector: document.getElementById('path-hop-selector'),
+            addHopToPathBtn: document.getElementById('add-hop-to-path-btn'),
+            // Analysis
+            analysisConcept: document.getElementById('analysis-concept'),
+            runCoalescenceBtn: document.getElementById('run-coalescence-btn'),
+            analysisPrognosisStart: document.getElementById('analysis-prognosis-start'),
+            runPrognosisBtn: document.getElementById('run-prognosis-btn'),
+            analysisDiagnosisEnd: document.getElementById('analysis-diagnosis-end'),
+            runDiagnosisBtn: document.getElementById('run-diagnosis-btn'),
+            analysisResults: document.getElementById('analysis-results'),
+            // Display & I/O
+            jsonOutput: document.getElementById('json-output'),
+            exportBtn: document.getElementById('export-btn'),
+            importBtn: document.getElementById('import-btn'),
+        };
+
+        // --- DATA MODEL & STATE ---
+        let ontologies = JSON.parse(localStorage.getItem('causalGraphData')) || [];
+        let activeOntologyIndex = 0;
+
+        // --- FACTORY FUNCTIONS ---
+        const createOntology = (name) => ({
+            ontologyName: name,
+            concepts: {},
+            predicates: {
+                triplet: ["is_number"], // Add special predicate here
+                hop: [], spatial: [],
+                temporal: ["PRECEDES", "MEETS", "OVERLAPS", "FINISHES", "CONTAINS", "STARTS", "EQUALS", "STARTED_BY", "FINISHED_BY", "DURING", "OVERLAPPED_BY", "MET_BY", "PRECEDED_BY"]
+            },
+            graph: { events: {}, hops: {}, paths: {} }
+        });
+
+        const createEvent = (triplet, space, time, provenance) => ({ triplet, space, time, provenance });
+        const createHop = (sourceEventIds, predicate, targetEventIds, time) => ({ sourceEventIds, predicate, targetEventIds, time });
+        const createPath = (name) => ({ name, sequence: [] });
+
+        // --- AGGREGATION & HELPER FUNCTIONS ---
+        const getAggregatedData = (key) => {
+            const data = new Set();
+            for (let i = 0; i <= activeOntologyIndex; i++) {
+                if (ontologies[i] && ontologies[i][key]) {
+                     Object.keys(ontologies[i][key]).forEach(item => data.add(item));
+                }
+            }
+            return Array.from(data);
+        };
+        
+        const getAggregatedPredicates = (type) => {
+             const data = new Set();
+             for (let i = 0; i <= activeOntologyIndex; i++) {
+                if (ontologies[i] && ontologies[i].predicates[type]) {
+                    ontologies[i].predicates[type].forEach(p => data.add(p));
+                }
+            }
+            return Array.from(data);
+        }
+
+        const populateSelect = (selectElement, options, placeholder = '') => {
+            selectElement.innerHTML = placeholder ? `<option value="">${placeholder}</option>` : '';
+            options.forEach(option => {
+                selectElement.innerHTML += `<option value="${option}">${option}</option>`;
+            });
+        };
+        
+        const populateSelectFromObject = (selectElement, object, placeholder = '') => {
+            selectElement.innerHTML = placeholder ? `<option value="">${placeholder}</option>` : '';
+            for (const key in object) {
+                 const name = object[key].triplet ? 
+                    `${key}: ${object[key].triplet.source} ${object[key].triplet.predicate} ${object[key].triplet.target}` :
+                    object[key].name || key;
+                selectElement.innerHTML += `<option value="${key}">${name}</option>`;
+            }
+        };
+
+        const getSelectedValues = (selectElement) => Array.from(selectElement.options).filter(o => o.selected).map(o => o.value);
+
+        // --- MAIN RENDER FUNCTION ---
+        function render() {
+            if (ontologies.length === 0) {
+                ontologies.push(createOntology("Base Ontology"));
+            }
+            localStorage.setItem('causalGraphData', JSON.stringify(ontologies));
+            
+            const activeOntology = ontologies[activeOntologyIndex];
+            if (!activeOntology) return;
+
+            // Populate Ontology Selector
+            dom.ontologySelector.innerHTML = '';
+            ontologies.forEach((ont, index) => {
+                const option = document.createElement('option');
+                option.value = index;
+                option.textContent = ont.ontologyName;
+                if(index === activeOntologyIndex) option.selected = true;
+                dom.ontologySelector.appendChild(option);
+            });
+            
+            // Populate Concept & Predicate Dropdowns
+            const concepts = getAggregatedData('concepts');
+            const tripletPredicates = getAggregatedPredicates('triplet');
+            const spatialPredicates = getAggregatedPredicates('spatial');
+            const temporalPredicates = getAggregatedPredicates('temporal');
+            const hopPredicates = getAggregatedPredicates('hop');
+            
+            populateSelect(dom.eventSource, concepts, 'Select Source');
+            populateSelect(dom.eventTarget, concepts, 'Select Target');
+            populateSelect(dom.eventSpaceConcept, concepts, 'Select Space Concept');
+            populateSelect(dom.eventTimeConcept, concepts, 'Select Time Concept');
+            populateSelect(dom.hopTimeConcept, concepts, 'Select Hop Time Concept');
+            
+            populateSelect(dom.eventPredicateTriplet, tripletPredicates, 'Select Predicate');
+            populateSelect(dom.eventPredicateSpatial, spatialPredicates, 'Select Spatial Predicate');
+            populateSelect(dom.eventPredicateTemporal, temporalPredicates, 'Select Temporal Predicate');
+            populateSelect(dom.hopPredicate, hopPredicates, 'Select Hop Predicate');
+            populateSelect(dom.hopTimePredicate, temporalPredicates, 'Select Hop Time Predicate');
+            
+            // Populate Event & Hop selectors
+            populateSelectFromObject(dom.hopSources, activeOntology.graph.events);
+            populateSelectFromObject(dom.hopTargets, activeOntology.graph.events);
+            populateSelectFromObject(dom.pathHopSelector, activeOntology.graph.hops, 'Select Hop');
+            populateSelectFromObject(dom.pathSelector, activeOntology.graph.paths, 'Select Path');
+
+            // Populate Analysis selectors
+            populateSelect(dom.analysisConcept, concepts, 'Select Concept');
+            populateSelectFromObject(dom.analysisPrognosisStart, activeOntology.graph.events, 'Select Start Event');
+            populateSelectFromObject(dom.analysisDiagnosisEnd, activeOntology.graph.events, 'Select End Event');
+
+            renderOntologyDisplay();
+            // Check initial state of the predicate dropdown
+            toggleTargetInput();
+        }
+
+        function renderOntologyDisplay() {
+            const container = dom.ontologyDisplayContainer;
+            container.innerHTML = ''; 
+            const ol = document.createElement('ol');
+            ontologies.forEach(ont => {
+                const li = document.createElement('li');
+                let html = `<h3>${ont.ontologyName}</h3>`;
+                const concepts = Object.keys(ont.concepts);
+                if (concepts.length > 0) {
+                    html += `<h4>Concepts</h4><ul>`;
+                    concepts.forEach(c => { html += `<li>${c}</li>`; });
+                    html += `</ul>`;
+                }
+                const predicateTypes = Object.keys(ont.predicates).filter(type => ont.predicates[type].length > 0);
+                 if (predicateTypes.length > 0) {
+                    html += `<h4>Predicates</h4>`;
+                    predicateTypes.forEach(type => {
+                        html += `<ul><strong>${type.charAt(0).toUpperCase() + type.slice(1)}:</strong>`;
+                        ont.predicates[type].forEach(p => { html += `<li>${p}</li>`; });
+                        html += `</ul>`;
+                    });
+                }
+                li.innerHTML = html;
+                ol.appendChild(li);
+            });
+            container.appendChild(ol);
+        }
+        
+        // --- NEW FUNCTION to toggle between concept and number input for target ---
+        function toggleTargetInput() {
+            if (dom.eventPredicateTriplet.value === 'is_number') {
+                dom.eventTarget.classList.add('hidden');
+                dom.eventTargetNumber.classList.remove('hidden');
+            } else {
+                dom.eventTarget.classList.remove('hidden');
+                dom.eventTargetNumber.classList.add('hidden');
+            }
+        }
+
+        // --- EVENT LISTENERS ---
+        // (Existing listeners for ontology, event, hop, path creation)
+        dom.addOntologyBtn.addEventListener('click', () => {
+            const name = dom.newOntologyName.value.trim();
+            if (name) {
+                ontologies.push(createOntology(name));
+                activeOntologyIndex = ontologies.length - 1;
+                dom.newOntologyName.value = '';
+                render();
+            }
+        });
+        dom.ontologySelector.addEventListener('change', () => {
+            activeOntologyIndex = parseInt(dom.ontologySelector.value);
+            render();
+        });
+        dom.addConceptBtn.addEventListener('click', () => {
+            const concept = dom.newConcept.value.trim();
+            if (concept && ontologies[activeOntologyIndex]) {
+                ontologies[activeOntologyIndex].concepts[concept] = {};
+                dom.newConcept.value = '';
+                render();
+            }
+        });
+        dom.addPredicateBtn.addEventListener('click', () => {
+            const predicate = dom.newPredicate.value.trim();
+            const type = dom.predicateType.value;
+            if (predicate && ontologies[activeOntologyIndex]) {
+                ontologies[activeOntologyIndex].predicates[type].push(predicate);
+                dom.newPredicate.value = '';
+                render();
+            }
+        });
+
+        // Add event listener for the predicate dropdown
+        dom.eventPredicateTriplet.addEventListener('change', toggleTargetInput);
+
+        dom.addEventBtn.addEventListener('click', () => {
+            // Determine the target value based on which input is visible
+            const targetValue = dom.eventPredicateTriplet.value === 'is_number'
+                ? dom.eventTargetNumber.value
+                : dom.eventTarget.value;
+
+            const eventData = {
+                triplet: { source: dom.eventSource.value, predicate: dom.eventPredicateTriplet.value, target: targetValue },
+                space: { predicate: dom.eventPredicateSpatial.value, concept: dom.eventSpaceConcept.value },
+                time: { predicate: dom.eventPredicateTemporal.value, concept: dom.eventTimeConcept.value },
+                provenance: dom.eventProvenance.value
+            };
+            if(eventData.triplet.source && eventData.triplet.predicate && eventData.triplet.target) {
+                const eventId = `event_${Date.now()}`;
+                ontologies[activeOntologyIndex].graph.events[eventId] = eventData;
+                render();
+            } else {
+                alert('Triplet fields are required to create an event.');
+            }
+        });
+        
+        dom.addHopBtn.addEventListener('click', () => {
+            const hopData = {
+                sourceEventIds: getSelectedValues(dom.hopSources),
+                targetEventIds: getSelectedValues(dom.hopTargets),
+                predicate: dom.hopPredicate.value,
+                time: { predicate: dom.hopTimePredicate.value, concept: dom.hopTimeConcept.value }
+            };
+            if (hopData.sourceEventIds.length > 0 && hopData.targetEventIds.length > 0 && hopData.predicate) {
+                const hopId = `hop_${Date.now()}`;
+                ontologies[activeOntologyIndex].graph.hops[hopId] = hopData;
+                render();
+            } else {
+                alert('A hop must have at least one source, one target, and a predicate.');
+            }
+        });
+        dom.addPathBtn.addEventListener('click', () => {
+            const name = dom.newPathName.value.trim();
+            if (name) {
+                const pathId = `path_${Date.now()}`;
+                ontologies[activeOntologyIndex].graph.paths[pathId] = createPath(name);
+                dom.newPathName.value = '';
+                render();
+            }
+        });
+        dom.addHopToPathBtn.addEventListener('click', () => {
+            const pathId = dom.pathSelector.value;
+            const hopId = dom.pathHopSelector.value;
+            if (pathId && hopId && ontologies[activeOntologyIndex].graph.paths[pathId]) {
+                ontologies[activeOntologyIndex].graph.paths[pathId].sequence.push(hopId);
+                render();
+            }
+        });
+        dom.exportBtn.addEventListener('click', () => {
+            dom.jsonOutput.value = JSON.stringify(ontologies, null, 2);
+            alert('Current graph exported to text area.');
+        });
+        dom.importBtn.addEventListener('click', () => {
+            const jsonString = dom.jsonOutput.value.trim();
+            if (!jsonString) {
+                alert('Text area is empty. Paste a graph to import.');
+                return;
+            }
+            if (!confirm('Are you sure? This will overwrite your current graph.')) {
+                return;
+            }
+            try {
+                const newData = JSON.parse(jsonString);
+                if (!Array.isArray(newData)) {
+                    throw new Error("Invalid format: Top-level structure must be an array.");
+                }
+                ontologies = newData;
+                activeOntologyIndex = 0;
+                render();
+                alert('Graph imported successfully!');
+            } catch (error) {
+                alert(`Import failed. Please check for errors in the JSON format.\n\nDetails: ${error.message}`);
+            }
+        });
+
+        // --- ANALYSIS EVENT LISTENERS ---
+        dom.runCoalescenceBtn.addEventListener('click', () => {
+            const concept = dom.analysisConcept.value;
+            if (!concept) {
+                alert('Please select a concept to analyze.');
+                return;
+            }
+            const results = analysis.coalesceHypernode(concept);
+            dom.analysisResults.textContent = `Paths involving "${concept}":\n\n` + JSON.stringify(results, null, 2);
+        });
+
+        dom.runPrognosisBtn.addEventListener('click', () => {
+            const startEventId = dom.analysisPrognosisStart.value;
+            if (!startEventId) {
+                alert('Please select a starting event for prognosis.');
+                return;
+            }
+            const results = analysis.prognosis(startEventId);
+            dom.analysisResults.textContent = `Possible next steps from "${startEventId}":\n\n` + JSON.stringify(results, null, 2);
+        });
+
+        dom.runDiagnosisBtn.addEventListener('click', () => {
+            const endEventId = dom.analysisDiagnosisEnd.value;
+            if (!endEventId) {
+                alert('Please select an ending event for diagnosis.');
+                return;
+            }
+            const results = analysis.diagnosis(endEventId);
+            dom.analysisResults.textContent = `Possible causes for "${endEventId}":\n\n` + JSON.stringify(results, null, 2);
+        });
+
+        // --- ANALYSIS LOGIC ---
+        const analysis = {
+            getActiveGraph: () => ontologies[activeOntologyIndex]?.graph,
+
+            coalesceHypernode(conceptName) {
+                const graph = this.getActiveGraph();
+                if (!graph) return { error: "No active graph." };
+
+                const relevantPaths = new Set();
+                for (const pathId in graph.paths) {
+                    const path = graph.paths[pathId];
+                    for (const hopId of path.sequence) {
+                        const hop = graph.hops[hopId];
+                        if (!hop) continue;
+
+                        const eventIds = [...hop.sourceEventIds, ...hop.targetEventIds];
+                        for (const eventId of eventIds) {
+                            const event = graph.events[eventId];
+                            if (event && (
+                                event.triplet.source === conceptName ||
+                                event.triplet.target === conceptName ||
+                                event.space.concept === conceptName ||
+                                event.time.concept === conceptName
+                            )) {
+                                relevantPaths.add(pathId);
+                                break; 
+                            }
+                        }
+                    }
+                }
+                return Array.from(relevantPaths);
+            },
+
+            prognosis(startEventId) {
+                const graph = this.getActiveGraph();
+                if (!graph) return { error: "No active graph." };
+
+                const nextHops = [];
+                for (const hopId in graph.hops) {
+                    const hop = graph.hops[hopId];
+                    if (hop.sourceEventIds.includes(startEventId)) {
+                        nextHops.push({ hopId, hop });
+                    }
+                }
+                return nextHops;
+            },
+
+            diagnosis(endEventId) {
+                const graph = this.getActiveGraph();
+                if (!graph) return { error: "No active graph." };
+
+                const precedingHops = [];
+                for (const hopId in graph.hops) {
+                    const hop = graph.hops[hopId];
+                    if (hop.targetEventIds.includes(endEventId)) {
+                        precedingHops.push({ hopId, hop });
+                    }
+                }
+                return precedingHops;
+            }
+        };
+
+        // --- INITIAL RENDER ---
+        render();
+    });
+    </script>
+</body>
+</html>
+|                                                                             |
+|   ______  _______  __   __  _______  _______  ___        _______  _______   |
+|  |      ||   _   ||  | |  ||       ||   _   ||   |      |       ||       |  |
+|  |    ||  ||  ||  | |  ||  _____||  ||  ||   |      |    ||     |  |
+|  |   |   |       ||  ||  || |_ |       ||   |      |   |___   |   |    |
+|  |   |   |       ||       ||_____  ||       ||   |___   |    |  |   |    |
+|  |   | |   _   ||       | | ||   _   ||       |  |   |      |   |    |
+|  |||| |||||||| ||||  ||      ||    |
+|                                                                             |
+|   ___  ___  _  _  ___  _  _  _    ___  ___  ___  ___    ___  ___  ___  ___  |
+|  | _|| || | || __|| | || |  | _|| || __|| |  | || || __|| | |
+|  | _|  | | | .  || _| | .  || || |  | | | | | |   | |  | | | | | |  |
+|  ||||||_|||||_|||| ||||||  |||||||| |
+|                                                                             |
+|                     KNOWLEDGE GRAPH BUILDER: USER GUIDE                     |
+|___________________________________________________________________________|
+
+[OVERVIEW]
+This documentation provides a comprehensive overview of the Causal Knowledge
+Graph Builder, a tool designed to model complex, contextualized causal
+reasoning through hierarchical ontologies and hyper-relational structures.
+
+===============================================================================
+[1] CORE ONTOLOGICAL STRUCTURE
+
+The foundation of this application is a HIERARCHICAL ORDERED ONTOLOGY.
+
++----------------------------+
+| HIERARCHY AND INHERITANCE  |
++----------------------------+
+| . ARRAY STRUCTURE          | Ontologies stored in ordered array [0...n].
+| . INHERITANCE              | Index [i] inherits all Concepts/Predicates
+|                            | from preceding indices [0...i-1].
+| . "BASE" ONTOLOGY          | Index 0 defines universal concepts (Time,
+|                            | Space) and predicates (is_a, part_of).
++----------------------------+
+
++----------------------------+
+|      COMPONENT TYPES       |
++----------------------------+
+| 1. CONCEPTS                | "Nouns": entities, regions, time points.
+| 2. PREDICATES              | "Verbs": categorized by use case:
+|    - Triplet Predicate     | Source -> Target relationship.
+|    - Spatial Predicate     | Event -> Spatial Concept (IN, NEAR).
+|    - Temporal Predicate    | Allen’s Interval Algebra (DURING, MEETS).
+|    - Hop Predicate         | Link between sets of Events (CAUSES).
++----------------------------+
+
+===============================================================================
+[2] THE FOUR-LAYER GRAPH ARCHITECTURE
+
+Layer moves from atomic facts to complex arguments:
+
+[ LAYER 1: CONCEPTS & PREDICATES ]
+The vocabulary defined in Ontology Management.
+
+[ LAYER 2: THE EVENT (PROPOSITION) ]
+A "Simple Sentence" situating a triplet in space/time.
+- Triplet: Source --[Predicate]--> Target
+- Context: Space + Time assertion.
+- Special: 'is_number' enables numeric input for quantitative data.
+
+[ LAYER 3: THE HOP (INFERENCE STEP) ]
+A "Compound Sentence" acting as a Directed Hyperedge.
+- Hyper-relational: Connects multiple Sources -> multiple Targets.
+- Interval Time: Occurs over a duration (e.g., DURING).
+
+[ LAYER 4: THE PATH (STATEMENT) ]
+A "Narrative": An ordered sequence of Hops representing 
+a complete causal chain or formal argument.
+
+
+===============================================================================
+[3] STEP-BY-STEP USAGE
+
+STEP 1: INITIALIZE ONTOLOGY
+
+[ ] Create Ontology (e.g., "Anatomy")
+[ ] Add Concepts   (e.g., "Lungs", "Oxygen")
+[ ] Add Predicates (Categorize: Triplet, Hop, or Spatial)
+
+STEP 2: CREATE EVENTS
+
+[ ] Select Source + Target concepts
+[ ] Define Spatial + Temporal context
+[ ] Assign Provenance (Textbook, Govt, Deduction)
+[ ] EXECUTE: [Create Event] -> Stores in active pool.
+
+STEP 3: DEFINE HOPS (LOGIC)
+
+[ ] Select Source Event(s) (Ctrl+Click for multiple)
+[ ] Select Target Event(s)
+[ ] Select Hop Predicate (e.g., "TRIGGERS")
+[ ] EXECUTE: [Create Hop]
+
+STEP 4: ASSEMBLE PATHS
+
+[ ] Create New Path
+[ ] Select Active Path from dropdown
+[ ] Add Hops in sequence
+[ ] EXECUTE: [Add Hop to Path]
+
+===============================================================================
+[4] ANALYSIS AND INFERENCE
+
+Utilize the "Second Brain" query functions:
+
++----------------------------+------------------------------------------------+
+| FUNCTION                   | DESCRIPTION                                    |
++----------------------------+------------------------------------------------+
+| Coalesce Hypernode         | Find every Path involving a specific Concept.  |
+| Prognosis                  | Forward chain: "What happens next?"            |
+| Diagnosis                  | Backward chain: "What caused this?"            |
++----------------------------+------------------------------------------------+
+
+===============================================================================
+[5] DATA PERSISTENCE (I/O)
+
+The system utilizes localStorage for automatic session saving.
+
+[EXPORT] -> [Export to Text Area] -> Generates JSON string for backup.
+
+[IMPORT] -> Paste JSON string -> [Import from Text Area] -> Restore session.
+
+| END_OF_MANUAL // (C) 2024 CAUSAL_GRAPH_SYSTEMS_INTL                         |
+|_____________________________________________________________________________|

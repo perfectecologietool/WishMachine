@@ -1,0 +1,2073 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Causal Graph Visualizer v20 (3D-Address Refactor)</title>
+    <!-- vis.js library for graph visualization -->
+    <script type="text/javascript" src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"></script>
+    <style>
+        :root {
+            --bg-color: #f4f7f6;
+            --card-bg: #ffffff;
+            --primary-color: #0d47a1;
+            --secondary-color: #1565c0;
+            --text-color: #333;
+            --border-color: #e0e0e0;
+            --header-color: #002171;
+            --label-color: #555;
+            --input-bg: #fdfdfd;
+            --conclusion-color: #c62828;
+            --start-node-color: #1b5e20; /* Green for start */
+            --end-node-color: #b71c1c;   /* Red for end */
+            --lca-node-color: #ff6f00;   /* Amber for LCA */
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            margin: 0;
+            padding: 20px;
+        }
+        .container { max-width: 1600px; margin: 0 auto; display: grid; grid-template-columns: 1fr; gap: 20px; }
+        .full-width { grid-column: 1 / -1; }
+        .card {
+            background-color: var(--card-bg); border-radius: 12px; padding: 25px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.05); border: 1px solid var(--border-color);
+            display: flex; flex-direction: column;
+        }
+        h1, h2, h3, h4 {
+            color: var(--header-color);
+            margin-top: 0;
+        }
+        h1,h2 {
+             border-bottom: 2px solid var(--primary-color);
+             padding-bottom: 10px;
+        }
+        label { display: block; margin-bottom: 8px; font-weight: 600; color: var(--label-color); }
+        input[type="text"], select, textarea {
+            width: 100%; padding: 12px; margin-bottom: 15px; border: 1px solid var(--border-color);
+            border-radius: 8px; box-sizing: border-box; background-color: var(--input-bg); font-size: 16px;
+        }
+        select[multiple] { min-height: 120px; }
+        button {
+            background: linear-gradient(45deg, var(--secondary-color), var(--primary-color)); color: white;
+            border: none; padding: 12px 20px; border-radius: 8px; cursor: pointer;
+            font-size: 16px; font-weight: 600; transition: transform 0.2s, box-shadow 0.2s; margin-top: 10px;
+        }
+        button:hover { transform: translateY(-2px); box-shadow: 0 6px 15px rgba(0,0,0,0.15); }
+        button:disabled { background: #9e9e9e; cursor: not-allowed; transform: none; box-shadow: none; }
+        .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+        .button-group { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 10px;} 
+
+        #argumentWorkspace { display: grid; grid-template-columns: 1fr; gap: 20px; margin-top: 20px; }
+        @media (min-width: 1024px) { #argumentWorkspace { grid-template-columns: 3fr 2fr; } }
+        #argumentCanvasContainer { border: 1px solid var(--border-color); border-radius: 12px; height: 700px; background-color: #fafafa; }
+        #argumentCanvas { width: 100%; height: 100%; }
+        #consoleContainer .console-section { padding: 20px; border-radius: 8px; background-color: var(--card-bg); border: 1px solid var(--border-color); margin-bottom: 15px;}
+        #consoleSelectedState { display: none; }
+        .console-split { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; }
+        #consoleSelectedState h3 { margin-top: 0; font-size: 1.1em; word-break: break-all; }
+        #consoleSelectedState select[multiple] { min-height: 250px; }
+        textarea { background-color: #2d2d2d; color: #f0f0f0; font-family: 'Fira Code', 'Courier New', monospace; min-height: 200px; }
+        #languageSelectorContainer { position: absolute; top: 20px; right: 20px; z-index: 10;}
+        
+        #eventsDisplayList, #hopsDisplayList, #searchResultsList { 
+            list-style-type: none; padding: 0; margin: 0; max-height: 300px; overflow-y: auto;
+            border: 1px solid var(--border-color); border-radius: 8px; padding: 10px; background-color: var(--input-bg);
+        }
+        #eventsDisplayList li, #hopsDisplayList li, #searchResultsList li { 
+            padding: 8px; border-bottom: 1px solid #f0f0f0; font-size: 0.9em; word-break: break-all;
+        }
+         #searchResultsList li:last-child { border-bottom: none; } 
+
+        #pathDisplay { margin-top: 15px; background-color: #e3f2fd; border-left: 5px solid var(--secondary-color); padding: 15px; border-radius: 0 8px 8px 0; font-size: 0.9em; }
+        #pathDisplay h4 { margin-top: 0; color: var(--header-color); }
+        #pathDisplay ol, #pathDisplay ul { padding-left: 25px; margin: 5px 0; } /* Allow ul for links */
+        #pathDisplay li { margin-bottom: 5px; word-break: break-all; } 
+        #pathDisplay .lca-highlight { font-weight: bold; color: var(--lca-node-color); } 
+        #pathDisplay .path-separator { margin-top: 10px; border-top: 1px dashed var(--secondary-color); padding-top: 10px;}
+        #pathDisplay .solid-link { color: var(--solid-link-color); font-weight: bold; }
+        #pathDisplay .dashed-link { color: var(--dashed-link-color); font-style: italic; }
+        #pathDisplay .link-details { font-size: 0.9em; color: #555; padding-left: 15px; }
+    </style>
+</head>
+<body>
+    <div id="languageSelectorContainer">
+        <select id="languageSelector">
+            <option value="en">English</option>
+            <option value="ta">தமிழ்</option>
+        </select>
+    </div>
+    <div class="container">
+	
+        <h1 class="full-width" id="mainTitle"></h1>
+
+        <div class="card full-width">
+            <h2 id="h2FoundationalSetup"></h2>
+            <div class="grid-2">
+                <div>
+                    <label for="newOntologyName" id="labelNewOntology"></label>
+                    <input type="text" id="newOntologyName">
+                    <label for="ontologyParents" id="labelInherit"></label>
+                    <select id="ontologyParents" multiple></select>
+                    <button id="addOntologyBtn"></button>
+                </div>
+                <div>
+                    <label for="ontologySelector" id="labelActiveOntology"></label>
+                    <select id="ontologySelector"></select>
+                </div>
+            </div>
+            <hr style="margin: 20px 0;">
+            <div class="grid-2">
+                 <div>
+                    <label for="newConcept" id="labelAddConcept"></label>
+                    <input type="text" id="newConcept">
+                    <button id="addConceptBtn"></button>
+                 </div>
+                 <div>
+                    <label for="newPredicate" id="labelAddPredicate"></label>
+                    <input type="text" id="newPredicate">
+                    <button id="addPredicateBtn"></button>
+                 </div>
+            </div>
+        </div>
+
+        <div class="card full-width">
+            <h2 id="h2CreateElements"></h2>
+            <div class="grid-2">
+                <div>
+                    <h3 id="h3CreateEvent"></h3>
+                    <label id="labelSource"></label><select id="eventSource"></select>
+                    <label id_labelPredicate"></label><select id="eventPredicateTriplet"></select>
+                    <label id_labelTarget"></label><select id="eventTarget"></select>
+                    <button id="addEventBtn"></button>
+                </div>
+                <div>
+                    <h3 id="h3CreateHop"></h3>
+                    <label id="labelHopSource"></label><select id="hopSources" multiple></select>
+                    <label id="labelHopPredicate"></label><select id="hopPredicate"></select>
+                    <label id="labelHopTarget"></label><select id="hopTargets" multiple></select>
+                    <button id="addHopBtn"></button>
+                </div>
+            </div>
+        </div>
+
+        <div class="card full-width">
+            <h2 id="h2ArgumentVisualizer"></h2>
+            <div id="argumentWorkspace">
+                <div id="argumentCanvasContainer">
+                    <div id="argumentCanvas"></div>
+                </div>
+                <div id="consoleContainer">
+                    <div id="consoleDefaultState" class="console-section">
+                        <h3 id="h3ArgControls"></h3>
+                        <label for="argumentSelector" id="labelActiveArgument"></label>
+                        <select id="argumentSelector"></select>
+                        <label for="newArgumentName" id="labelNewArgument"></label>
+                        <input type="text" id="newArgumentName">
+                        <button id="addArgumentBtn"></button>
+                        <hr style="margin: 15px 0;">
+                        <label for="addHopToArgSelector" id="labelAddHopCanvas"></label>
+                        <select id="addHopToArgSelector"></select>
+                        <button id="addHopToArgumentBtn"></button>
+                        <hr style="margin: 15px 0;">
+                        <label for="argumentConclusionSelector" id="labelSetConclusion"></label>
+                        <select id="argumentConclusionSelector"></select>
+                        <button id="setConclusionBtn"></button>
+						 <hr style="margin: 15px 0;">
+                        <h4 id="h4Pathfinding"></h4>
+                        <p id="pPathfindingInstructions"></p>
+                        <div class="grid-2">
+                            <div><label id="labelStartNode"></label><span id="startNodeDisplay"></span></div>
+                            <div><label id="labelEndNode"></label><span id="endNodeDisplay"></span></div>
+                        </div>
+                        <div class="button-group">
+                             <button id="findPathBtn" disabled></button>
+    					     <button id="tracePathsBtn" disabled></button> 
+                             <button id="analyzeSupportBtn" disabled></button>
+                             <button id="clearPathSelectionBtn"></button> 
+                        </div>
+                    </div>
+                    <div id="consoleSelectedState" class="console-section">
+                        <h3 id="selectedHopHeader"></h3>
+                        <button id="setAsConclusionBtn"></button>
+                        <div class="console-split">
+                            <div>
+                                <label for="selectedHopSources" id="labelPremises"></label>
+                                <select id="selectedHopSources" multiple></select>
+                            </div>
+                            <div>
+                                <label for="selectedHopTargets" id="labelConsequences"></label>
+                                <select id="selectedHopTargets" multiple></select>
+                            </div>
+                        </div>
+                    </div> 
+                    <div id="pathDisplay"></div> 
+                </div>
+            </div>
+        </div>
+        <div class="card full-width">
+            <h2 id="h2KeywordSearch"></h2>
+            <label for="searchInput" id="labelSearchInput"></label>
+            <input type="text" id="searchInput">
+            <button id="searchBtn"></button>
+            <h3 id="h3SearchResults"></h3>
+            <ul id="searchResultsList"></ul>
+        </div>
+        <div class="card full-width">
+            <h2 id="h2ActiveElements"></h2>
+            <div class="grid-2">
+                <div>
+                    <h3 id="h3EventsList"></h3>
+                    <ul id="eventsDisplayList"></ul>
+                </div>
+                <div>
+                    <h3 id="h3HopsList"></h3>
+                    <ul id="hopsDisplayList"></ul>
+                </div>
+            </div>
+        </div>
+
+        <div class="card full-width">
+            <h2 id="h2Io"></h2>
+            <textarea id="jsonOutput"></textarea>
+            <div class="button-group">
+                <button id="exportBtn"></button>
+                <button id="importBtn"></button>
+            </div>
+        </div>
+
+        <!-- NEW ONTOLOGY EDITOR CARD -->
+        <div class="card full-width">
+            <h2 id="h2OntologyEditor"></h2>
+            <div class="grid-2">
+                <div>
+                    <h3 id="h3EditConcepts"></h3>
+                    <label for="editConceptSelector" id="labelEditConceptSelector"></label>
+                    <select id="editConceptSelector"></select>
+                    <label for="editConceptName" id="labelEditConceptName"></label>
+                    <input type="text" id="editConceptName">
+                    <button id="updateConceptBtn"></button>
+                </div>
+                <div>
+                    <h3 id="h3EditPredicates"></h3>
+                    <label for="editPredicateSelector" id="labelEditPredicateSelector"></label>
+                    <select id="editPredicateSelector"></select>
+                    <label for="editPredicateName" id="labelEditPredicateName"></label>
+                    <input type="text" id="editPredicateName">
+                    <button id="updatePredicateBtn"></button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+    document.addEventListener('DOMContentLoaded', () => {
+        // --- DEBUGGING FLAG & STACK TRACE SYSTEM ---
+        const DEBUG = true;
+        let StackTrace = [];
+        function pushStackTrace(nameOfFunc) { const v1 = StackTrace.push(nameOfFunc); return v1 - 1; }
+        function popStackTrace(ind) { StackTrace.splice(ind, 1); }
+        function printStackTrace() { let str1 = "TRACE:"; for (let i = 0; i < StackTrace.length; i++) { str1 += "\n" + "  ".repeat(i) + "-> " + StackTrace[i]; } return str1; }
+        function log(...args) { if (DEBUG) { console.log(printStackTrace(), ...args); } }
+        
+        // --- NEW REGISTER (RegId) SYSTEM ---
+       class DotRegister {
+            constructor () {
+                const ind = pushStackTrace("DotRegister.constructor");
+                this.first = []; // Stores the index in 'second' array. The index of 'first' is the RegId.
+                this.second = []; // Stores the actual class instances.
+                popStackTrace(ind);
+            }
+            pushdot(dot){
+                const ind = pushStackTrace("DotRegister.pushdot");
+                if(dot instanceof RefDot){
+                    this.second.push(dot);
+                    const secondIndex = this.second.length - 1;
+                    this.first.push(secondIndex);
+                    const regId = this.first.length - 1;
+                    popStackTrace(ind);
+                    return regId; // This is the new RegId
+                } else {
+                    alert("not a dot being registered.");
+                    popStackTrace(ind);
+                    return -1;
+                }
+            }
+			printdump(verbosity = 1){
+                 const ind = pushStackTrace("DotRegister.printdump");
+				 
+                if(verbosity > 1 ){	
+                    console.log("FIRST (RegId -> SecondIndex)", this.first);
+                    console.log("SECOND (Actual Instances)", this.second);
+                }
+                popStackTrace(ind);
+             }
+
+             popnum (ind) {
+                const indStack = pushStackTrace("DotRegister.popnum");	
+                if((Number(ind) >= 0) && (ind < this.first.length)){ // Check bounds
+                    var FV1 = this.first[ind]; // Get the index in 'second' array
+                    if(FV1 != -1){ // Check if not already deleted
+                        this.second.splice(FV1,1); // Remove from 'second'
+                        // Now we must re-index 'first' array
+                        for(let ite1 = 0; ite1 < this.first.length; ite1++){
+                            if(this.first[ite1] > FV1){ this.first[ite1]--; } // Decrement all indices greater than the one we removed
+                        }
+                        this.first[ind] = -1; // Mark this RegId as deleted
+                    }
+                }	 
+                popStackTrace(indStack);	 
+            }
+    
+            fetchdot(ind){
+                const indStack = pushStackTrace("DotRegister.fetchdot");
+                if (ind instanceof RefDot) {
+                    ind = ind.RegId; // If passed an instance, get its ID
+                }
+                if((ind >= 0) && (ind < this.first.length)){ // Use < not <=
+                    let rd = this.first[ind]; // Get the index for the 'second' array
+                    if(rd != -1){ // Make sure it's not a deleted ID
+                        var sd = this.second[rd];
+                        popStackTrace(indStack);			
+                        return sd;	
+                    }
+                } 
+                log(`[DotRegister.fetchdot] Failed to fetch dot with RegId: ${ind}`);
+                popStackTrace(indStack);
+                return null;
+             }
+        }
+        // --- GLOBAL REGISTER INSTANCE & HELPERS ---
+        const dotreg = new DotRegister();
+        function dr(indexor) { return dotreg.fetchdot(indexor); }
+
+        // --- NEW RefDot Base Class ---
+        class RefDot {
+            constructor() {
+                const ind = pushStackTrace('RefDot.constructor');
+                this.RegId = dotreg.pushdot(this); 
+                // log(`New ${this.constructor.name} created with RegId: ${this.RegId}`);
+                popStackTrace(ind);
+            }
+        }
+        
+        // --- LOCALES ---
+          const locales = {
+            en: { mainTitle: "Causal Knowledge Graph Visualizer", h2FoundationalSetup: "1. Foundational Knowledge Setup", labelNewOntology: "Create New Ontology", newOntologyName_placeholder: "e.g., Biology", labelInherit: "Inherit From (Parents):", addOntologyBtn: "Create Ontology", labelActiveOntology: "Select Active Ontology", labelAddConcept: "Add Concept to Active Ontology", newConcept_placeholder: "e.g., Cell", addConceptBtn: "Add Concept", labelAddPredicate: "Add Triplet Predicate to Active Ontology", newPredicate_placeholder: "e.g., causes, contains", addPredicateBtn: "Add Predicate", h2CreateElements: "2. Create Knowledge Graph Elements", h3CreateEvent: "Create an Event (Fact / Proposition)", labelSource: "Source", labelPredicate: "Predicate", labelTarget: "Target", addEventBtn: "Create Event", h3CreateHop: "Create a Hop (Causal/Logical Link)", labelHopSource: "Source Node(s)", labelHopPredicate: "Hop Predicate", labelHopTarget: "Target Node(s)", addHopBtn: "Create Hop", h2ArgumentVisualizer: "3. Argument Visualizer", h3ArgControls: "Argument Controls", labelActiveArgument: "Select Active Argument", labelNewArgument: "Or Create New Argument", newArgumentName_placeholder: "e.g., Photosynthesis Process", addArgumentBtn: "Create Argument", labelAddHopCanvas: "Add Hop to Canvas", addHopToArgumentBtn: "Add to Argument", labelSetConclusion: "Set Argument's Conclusion", setConclusionBtn: "Set Conclusion", editingHop_prefix: "Editing: ", 
+			setAsConclusionBtn: "Set as Conclusion", labelPremises: "Premises / Source Set", labelConsequences: "Consequences / Target Set", h4Pathfinding: "Pathfinding", pPathfindingInstructions: "Shift + Click two nodes on the canvas to select a start and end point.", labelStartNode: "Start:", startNodeDisplay_placeholder: "None selected", labelEndNode: "End:", endNodeDisplay_placeholder: "None selected", 
+			findPathBtn: "Find & Linearize Path", 
+			clearPathSelectionBtn: "Clear Path Selection", analyzeSupportBtn: "Analyze Path/Goal Support",
+			pathDisplay_title: "Linearized Path:", 
+			
+			pathDisplay_divergent_title: "Divergent Paths:", pathDisplay_analysis_title: "Path Analysis:", pathDisplay_goal_analysis_title: "Goal Support Analysis:", pathDisplay_solid_paths_title: "Fully Supported Paths:", pathDisplay_lca: "Strongest Common Ancestor:", pathDisplay_path_to: "Path to", pathDisplay_noPath: "No DIRECT path found between selected nodes.", pathDisplay_noUndirectedPath: "No connecting path found.", pathDisplay_noLCA: "No single common ancestor found.", pathDisplay_selectNodes: "Select start and end/goal nodes first.", pathDisplay_selectGoalNode: "Select a goal node first.", pathDisplay_solidLinks: "Solid Links:", pathDisplay_dashedLinks: "Dashed (Weak) Links:", pathDisplay_noSolidPaths: "No fully supported paths found to this goal.", pathDisplay_disconnected: "Start and End nodes are in disconnected branches.", h2KeywordSearch: "4. Keyword Search", labelSearchInput: "Enter Keyword:", searchInput_placeholder: "e.g., Cell, causes", searchBtn: "Search", h3SearchResults: "Search Results:", searchResults_noResults: "No hops found containing that keyword.", 
+			h2ActiveElements: "5. Active Ontology Elements", h3EventsList: "Events", h3HopsList: "Hops", h2Io: "6. Knowledge Graph I/O", jsonOutput_placeholder: "Click 'Export' to see the current graph, or paste a graph here and click 'Import'.", exportBtn: "Export", importBtn: "Import",
+
+			h2OntologyEditor: "7. Ontology Editor", h3EditConcepts: "Edit Concepts", labelEditConceptSelector: "Select Concept to Edit:", labelEditConceptName: "Edit Name (leave blank to delete):", updateConceptBtn: "Update/Delete Concept", h3EditPredicates: "Edit Predicates", labelEditPredicateSelector: "Select Predicate to Edit:", labelEditPredicateName: "Edit Name (leave blank to delete):", updatePredicateBtn: "Update/Delete Predicate",
+			
+           alert_importFailed: "Import failed: ", alert_graphExported: "Graph exported.", confirm_overwrite: "This will overwrite current work.", alert_graphImported: "Graph imported.", alert_duplicateEvent: "This exact event already exists and will not be added.", alert_eventRequirements: "An event must have at least a source and a predicate.", tracePathsBtn: "Trace Divergent Paths",  pathDisplay_divergent_title: "Divergent Paths:", pathDisplay_lca: "Lowest Common Ancestor:", pathDisplay_path_to: "Path to", pathDisplay_noUndirectedPath: "No connecting path found.", pathDisplay_noLCA: "No single common ancestor found.",h2KeywordSearch: "Keyword Search", labelSearchInput: "Enter Keyword:", searchInput_placeholder: "e.g., Cell, causes", searchBtn: "Search", h3SearchResults: "Search Results:", searchResults_noResults: "No hops found containing that keyword.",   },
+            ta: { mainTitle: "காரண அறிவு வரைபடக் காட்சிப்படுத்தி", h2FoundationalSetup: "1. அடிப்படை அறிவு அமைப்பு", labelNewOntology: "புதிய மெய்யியல் உருவாக்கவும்", newOntologyName_placeholder: "உதா: உயிரியல்", labelInherit: "மரபுரிமை (பெற்றோர்):", addOntologyBtn: "மெய்யியல் உருவாக்கவும்", labelActiveOntology: "செயலில் உள்ள மெய்யியலைத் தேர்ந்தெடுக்கவும்", labelAddConcept: "செயலில் உள்ள மெய்யியலில் கருத்தைச் சேர்க்கவும்", newConcept_placeholder: "உதா: செல்", addConceptBtn: "கருத்தைச் சேர்", labelAddPredicate: "மும்மை பயனிலையைச் சேர்க்கவும்", newPredicate_placeholder: "உதா: ஏற்படுத்துகிறது, கொண்டுள்ளது", addPredicateBtn: "பயனிலையைச் சேர்", h2CreateElements: "2. அறிவு வரைபடக் கூறுகளை உருவாக்கவும்", h3CreateEvent: "ஒரு நிகழ்வை உருவாக்கவும் (உண்மை / கூற்று)", labelSource: "மூலம்", labelPredicate: "பயனிலை", labelTarget: "இலக்கு", addEventBtn: "நிகழ்வை உருவாக்கு", h3CreateHop: "ஒரு தாவலை உருவாக்கவும் (காரண / தருக்க இணைப்பு)", labelHopSource: "மூல கணு(க்கள்)", labelHopPredicate: "தாவல் பயனிலை", labelHopTarget: "இலக்கு கணு(க்கள்)", addHopBtn: "தாவலை உருவாக்கு", h2ArgumentVisualizer: "3. வாதக் காட்சிப்படுத்தி", h3ArgControls: "வாதக் கட்டுப்பாடுகள்", labelActiveArgument: "செயலில் உள்ள வாதத்தைத் தேர்ந்தெடுக்கவும்", labelNewArgument: "அல்லது புதிய வாதத்தை உருவாக்கவும்", newArgumentName_placeholder: "உதா: ஒளிச்சேர்க்கை செயல்முறை", addArgumentBtn: "வாதத்தை உருவாக்கு", labelAddHopCanvas: "திரையில் தாவலைச் சேர்", addHopToArgumentBtn: "வாதத்தில் சேர்", labelSetConclusion: "வாதத்தின் முடிவை அமைக்கவும்", setConclusionBtn: "முடிவை அமை", editingHop_prefix: "திருத்துதல்: ", setAsConclusionBtn: "முடிவாக அமை", labelPremises: "முன்மொழிவுகள் / மூலக் கணம்", labelConsequences: "விளைவுகள் / இலக்குக் கணம்",     h4Pathfinding: "வழி கண்டறிதல்", pPathfindingInstructions: "தொடக்க மற்றும் இறுதிப் புள்ளிகளைத் தேர்ந்தெடுக்க திரையில் ஷிப்ட் + கிளிக் செய்யவும்.", labelStartNode: "தொடக்கம்:", startNodeDisplay_placeholder: "தேர்ந்தெடுக்கப்படவில்லை", labelEndNode: "முடிவு:", endNodeDisplay_placeholder: "தேர்ந்தெடுக்கப்படவில்லை",     findPathBtn: "நேரியல் பாதையைக் கண்டுபிடி",    tracePathsBtn: "வேறுபட்ட பாதைகளைக் கண்டறி",     clearPathSelectionBtn: "வழித் தேர்வை அழி",analyzeSupportBtn: "பாதை/இலக்கு ஆதரவை பகுப்பாய்வு ",     pathDisplay_title: "நேரியல் பாதை:", 
+pathDisplay_divergent_title: "வேறுபட்ட பாதைகள்:",
+pathDisplay_analysis_title: "பாதை பகுப்பாய்வு:",
+pathDisplay_goal_analysis_title: "இலக்கு ஆதரவு பகுப்பாய்வு:",
+pathDisplay_solid_paths_title: "முழுமையாக ஆதரிக்கப்பட்ட பாதைகள்:",
+pathDisplay_lca: "வலுவான பொதுவான மூதாதையர்:",
+pathDisplay_path_to: "இதற்கான பாதை:",
+pathDisplay_noPath: "தேர்ந்தெடுக்கப்பட்ட கணுக்களுக்கு இடையில் நேரடிப் பாதை எதுவும் இல்லை.",
+pathDisplay_noUndirectedPath: "இணைக்கும் பாதை எதுவும் இல்லை.",
+pathDisplay_noLCA: "ஒற்றைப் பொதுவான மூதாதையர் இல்லை.",
+pathDisplay_selectNodes: "முதலில் தொடக்க மற்றும் இறுதி/இலக்கு கணுக்களைத் தேர்ந்தெடுக்கவும்.",
+pathDisplay_selectGoalNode: "முதலில் ஒரு இலக்கு கணுவைத் தேர்ந்தெடுக்கவும்.",
+pathDisplay_solidLinks: "திடமான இணைப்புகள்:",
+pathDisplay_dashedLinks: "விட்டுப்போன (பலவீனமான) இணைப்புகள்:",
+pathDisplay_noSolidPaths: "இந்த இலக்கிற்கு முழுமையாக ஆதரிக்கப்பட்ட பாதைகள் எதுவும் இல்லை.",
+pathDisplay_disconnected: "தொடக்க மற்றும் இறுதி கணுக்கள் துண்டிக்கப்பட்ட கிளைகளில் உள்ளன.",
+h2KeywordSearch: "4. திறவுச்சொல் தேடல்",
+labelSearchInput: "திறவுச்சொல்லை உள்ளிடவும்:",
+searchInput_placeholder: "உதா:, செல், ஏற்படுத்துகிறது",
+searchBtn: "தேடு",
+h3SearchResults: "தேடல் முடிவுகள்:",
+searchResults_noResults: "அந்தத் திறவுச்சொல்லைக் கொண்ட தாவல்கள் எதுவும் இல்லை.",
+			h2ActiveElements: "5. செயலில் உள்ள மெய்யியல் கூறுகள்",
+h3EventsList: "நிகழ்வுகள்",
+h3HopsList: "தாவல்கள்",
+h2Io: "6. அறிவு வரைபட உள்ளீடு/வெளியீடு",	jsonOutput_placeholder: "தற்போதைய வரைபடத்தைக் காண 'ஏற்றுமதி' என்பதைக் கிளிக் செய்யவும், அல்லது ஒரு வரைபடத்தை இங்கே ஒட்டி 'இறக்குமதி' என்பதைக் கிளிக் செய்யவும்.", exportBtn: "ஏற்றுமதி", importBtn: "இறக்குமதி", alert_importFailed: "இறக்குமதி தோல்வியடைந்தது: ", alert_graphExported: "வரைபடம் ஏற்றுமதி செய்யப்பட்டது.", confirm_overwrite: "இது உங்கள் தற்போதைய வேலையை மேலெழுதும்.", alert_graphImported: "வரைபடம் வெற்றிகரமாக இறக்குமதி செய்யப்பட்டது.", alert_duplicateEvent: "இந்த நிகழ்வு ஏற்கனவே உள்ளது மற்றும் மீண்டும் சேர்க்கப்படாது.", alert_eventRequirements: "ஒரு நிகழ்வுக்கு குறைந்தபட்சம் ஒரு மூலமும் பயனிலையும் இருக்க வேண்டும்.", 
+h2KeywordSearch: "திறவுச்சொல் தேடல்", labelSearchInput: "திறவுச்சொல்லை உள்ளிடவும்:", searchInput_placeholder: "உதா:, செல், ஏற்படுத்துகிறது", searchBtn: "தேடு", h3SearchResults: "தேடல் முடிவுகள்:", searchResults_noResults: "அந்தத் திறவுச்சொல்லைக் கொண்ட தாவல்கள் எதுவும் இல்லை." }
+        };
+        
+        // --- DATA MODEL CLASSES (3D-Address Refactor) ---
+        
+        // 3D-Address Type Enums
+        const ADDR_TYPE = { C: 'concepts', T: 'predicates', E: 'events', H: 'hops', A: 'arguments', O: 'ontologies' };
+        const ADDR_CHAR = { 'concepts': 'C', 'predicates': 'T', 'events': 'E', 'hops': 'H', 'arguments': 'A', 'ontologies': 'O' };
+
+        class Concept extends RefDot {
+            constructor(name) { 
+                const ind = pushStackTrace('Concept.constructor'); 
+                super(); 
+                this.name = name; 
+                popStackTrace(ind); 
+            }
+            getDisplayName(config = {}) { return this.name; }
+            toJson() { 
+                const ind = pushStackTrace('Concept.toJson');
+                popStackTrace(ind);
+                return this.name; // Dehydrated format is just a string
+            }
+        }
+        
+        class TripletPredicate extends RefDot {
+            constructor(name) { 
+                const ind = pushStackTrace('TripletPredicate.constructor'); 
+                super();
+                this.name = name; 
+                popStackTrace(ind); 
+            }
+            getDisplayName(config = {}) { return this.name; }
+            toJson() { 
+                const ind = pushStackTrace('TripletPredicate.toJson');
+                popStackTrace(ind);
+                return this.name; // Dehydrated format is just a string
+            }
+        }
+        
+        class Event extends RefDot {
+            constructor(sourceRegId, predicateRegId, targetRegId) { 
+                const ind = pushStackTrace('Event.constructor'); 
+                super();
+                this.triplet = { source: sourceRegId, predicate: predicateRegId, target: targetRegId }; // Stores RegIds
+                popStackTrace(ind); 
+            }
+            getDisplayName(config = {}) { 
+                const sourceName = dr(this.triplet.source)?.getDisplayName() || `[RegId: ${this.triplet.source}]`;
+                const predName = dr(this.triplet.predicate)?.getDisplayName() || `[RegId: ${this.triplet.predicate}]`;
+                const targetName = dr(this.triplet.target)?.getDisplayName() || `[RegId: ${this.triplet.target}]`;
+                return `E: ${sourceName} ${predName} ${targetName}`; 
+            }
+            toJson(config = {}) { 
+                const ind = pushStackTrace('Event.toJson');
+                const { addressMap } = config; // Map is { RegId -> { t:'C', o: ont_idx, i: arr_idx } }
+                const json = { 
+                    _type: 'Event', 
+                    triplet: {
+                        source: addressMap.get(this.triplet.source),
+                        predicate: addressMap.get(this.triplet.predicate),
+                        target: addressMap.get(this.triplet.target)
+                    }
+                };
+                popStackTrace(ind);
+                return json;
+            }
+        }
+        
+        class Hop extends RefDot {
+            constructor(sourceNodeIds, predicate, targetNodeIds) { 
+                const ind = pushStackTrace('Hop.constructor'); 
+                super();
+                this.sourceNodeIds = sourceNodeIds || []; // Array of RegIds
+                this.predicate = predicate; 
+                this.targetNodeIds = targetNodeIds || []; // Array of RegIds
+                popStackTrace(ind); 
+            } 
+            getDisplayName(config = {}) {
+                const ind = pushStackTrace('Hop.getDisplayName');
+                const { isRecursive = false, detailedFormat = false } = config; 
+
+                const getName = (regId) => {
+                    const ind2 = pushStackTrace('Hop.getDisplayName.getName');
+                    const node = dr(regId); 
+                    if (!node) { popStackTrace(ind2); return `[RegId: ${regId}]`; }
+                    let displayName = "[Unknown Node]";
+                     if (typeof node.getDisplayName === 'function') {
+                         displayName = node.getDisplayName({ isRecursive: true }); 
+                         if (node instanceof Event) { displayName = displayName.replace(/^E: /, ''); }
+                     } else { log("Error: Node found but no getDisplayName method:", node); }
+                    popStackTrace(ind2);
+                    return displayName;
+                };
+
+                const sourceNames = (this.sourceNodeIds || []).map(getName).join(' & ');
+                const targetNames = (this.targetNodeIds || []).map(getName).join(' & ');
+
+                let hopDisplay;
+                if (detailedFormat) {
+                    if (!this.targetNodeIds || this.targetNodeIds.length === 0) {
+                        hopDisplay = `${this.predicate || '?'}(${sourceNames || '?'})`;
+                    } else {
+                        hopDisplay = `(${sourceNames || '?'}) -[${this.predicate || '?'}]-> (${targetNames || '?'})`;
+                    }
+                } else {
+                    const prefix = isRecursive ? '' : 'H: '; 
+                    if(!this.targetNodeIds || this.targetNodeIds.length === 0) {
+                        hopDisplay = `${prefix}${this.predicate || '?'}(${sourceNames || '?'})`;
+                    } else {
+                        hopDisplay = `${prefix}(${sourceNames || '?'}) -> (${targetNames || '?'})`; 
+                    }
+                }
+                popStackTrace(ind);
+                return hopDisplay; 
+            }
+            toJson(config = {}) { 
+                const ind = pushStackTrace('Hop.toJson');
+                const { addressMap } = config; // Map is { RegId -> { t:'C', o: ont_idx, i: arr_idx } }
+                const json = { 
+                    _type: 'Hop', 
+                    sourceNodeIds: this.sourceNodeIds.map(regId => addressMap.get(regId)).filter(Boolean), 
+                    predicate: this.predicate, 
+                    targetNodeIds: this.targetNodeIds.map(regId => addressMap.get(regId)).filter(Boolean) 
+                }; 
+                popStackTrace(ind);
+                return json;
+            }
+        }
+        
+        class Argument extends RefDot {
+            constructor(name, conclusionId = null, nodes = {}) { 
+                const ind = pushStackTrace('Argument.constructor'); 
+                super();
+                this._name = name; 
+                this.conclusionId = conclusionId; // This will be a RegId
+                this.nodes = nodes; // This will be { [RegId]: { id: RegId, ... }, ... }
+                popStackTrace(ind); 
+            }
+            addNode(hopRegId) {
+                const ind = pushStackTrace('Argument.addNode');
+                if (!this.nodes[hopRegId]) { this.nodes[hopRegId] = { id: hopRegId, deepInboundLinks: [], deepOutboundLinks: [] }; }
+                popStackTrace(ind);
+            }
+            getDisplayName(config = {}) { return `Arg: ${this._name}`; }
+            toJson(config = {}) { 
+                const ind = pushStackTrace('Argument.toJson');
+                const { addressMap } = config; 
+                
+                const dehydratedNodes = [];
+                for (const regId in this.nodes) {
+                    const nodeData = this.nodes[regId];
+                    const linkObj = addressMap.get(parseInt(regId, 10)); // This is the address for the hop itself
+                    if (linkObj && linkObj.t === 'H') { // Ensure it's a hop
+                         dehydratedNodes.push({ 
+                            node: linkObj, // Store the 3D-address of the hop
+                            deepInboundLinks: (nodeData.deepInboundLinks || []).map(link => addressMap.get(link.from)).filter(Boolean),
+                            deepOutboundLinks: (nodeData.deepOutboundLinks || []).map(link => addressMap.get(link.to)).filter(Boolean)
+                        });
+                    }
+                }
+                
+                const json = { 
+                    _type: 'Argument', 
+                    name: this._name, 
+                    conclusionId: addressMap.get(this.conclusionId) || null, 
+                    nodes: dehydratedNodes 
+                }; 
+                popStackTrace(ind);
+                return json;
+            }
+        }
+        
+        class Ontology extends RefDot {
+            constructor(ontologyName, parents = [], concepts = [], predicates = [], graph = { events: [], hops: [], arguments: [] }) { 
+                const ind = pushStackTrace('Ontology.constructor'); 
+                super();
+                this.ontologyName = ontologyName; 
+                this.parents = parents; // Array of RegIds
+                this.concepts = concepts; // Array of RegIds
+                this.predicates = { triplet: predicates }; // Array of RegIds
+                this.graph = { // Arrays of RegIds
+                    events: graph.events, 
+                    hops: graph.hops, 
+                    arguments: graph.arguments 
+                }; 
+                popStackTrace(ind); 
+            }
+            addGraphElement(type, obj) { 
+                const ind = pushStackTrace('Ontology.addGraphElement');
+                if (!(obj instanceof RefDot)) { log("Error: Tried to add a non-RefDot object to graph.", obj); popStackTrace(ind); return; }
+                this.graph[type].push(obj.RegId); 
+                log(`[addGraphElement] Added ${type} (RegId: ${obj.RegId}) to Ontology graph array.`);
+                popStackTrace(ind); 
+            }
+            getDisplayName(config = {}) { return this.ontologyName; }
+            
+            toJson(config = {}) { 
+                const ind = pushStackTrace('Ontology.toJson');
+                // These are the GLOBAL maps passed down from saveState()
+                const { addressMap, ontologyMap } = config; 
+
+                const conceptsArray = this.concepts.map(regId => dr(regId).toJson());
+                const predicatesArray = this.predicates.triplet.map(regId => dr(regId).toJson());
+                
+                const eventsArray = this.graph.events.map(regId => dr(regId).toJson({ addressMap }));
+                const finalHopsArray = this.graph.hops.map(regId => dr(regId).toJson({ addressMap }));
+                const finalArgumentsArray = this.graph.arguments.map(regId => dr(regId).toJson({ addressMap }));
+                
+                // 4. Parents
+                const parentIndices = this.parents.map(regId => ontologyMap.get(regId)).filter(idx => idx !== undefined);
+
+                popStackTrace(ind);
+                return { 
+                    _type: 'Ontology', 
+                    ontologyName: this.ontologyName, 
+                    parents: parentIndices, 
+                    concepts: conceptsArray, 
+                    predicates: { triplet: predicatesArray }, 
+                    graph: { 
+                        events: eventsArray, 
+                        hops: finalHopsArray, 
+                        arguments: finalArgumentsArray 
+                    }
+                };
+            }
+        }
+        
+        const dom = {};
+        const domIDs = ['languageSelector', 'mainTitle', 'h2FoundationalSetup', 'labelNewOntology', 'newOntologyName', 'labelInherit', 'addOntologyBtn', 'labelActiveOntology', 'ontologySelector', 'labelAddConcept', 'newConcept', 'addConceptBtn', 'labelAddPredicate', 'newPredicate', 'addPredicateBtn', 'h2CreateElements', 'h3CreateEvent', 'labelSource', 'eventSource', 'labelPredicate', 'eventPredicateTriplet', 'labelTarget', 'eventTarget', 'addEventBtn', 'h3CreateHop', 'labelHopSource', 'hopSources', 'labelHopPredicate', 'hopPredicate', 'labelHopTarget', 'hopTargets', 'addHopBtn', 'h2ArgumentVisualizer', 'argumentCanvas', 'consoleDefaultState', 'consoleSelectedState', 'h3ArgControls', 'labelActiveArgument', 'argumentSelector', 'labelNewArgument', 'newArgumentName', 'addArgumentBtn', 'labelAddHopCanvas', 'addHopToArgSelector', 'addHopToArgumentBtn', 'labelSetConclusion', 'argumentConclusionSelector', 'setConclusionBtn', 'selectedHopHeader', 'setAsConclusionBtn', 'labelPremises', 'selectedHopSources', 'labelConsequences', 'selectedHopTargets', 'h2Io', 'jsonOutput', 'exportBtn', 'importBtn', 'ontologyParents', 'h2ActiveElements', 'h3EventsList', 'eventsDisplayList', 'h3HopsList', 'hopsDisplayList', 'findPathBtn', 'tracePathsBtn', 'analyzeSupportBtn', 'pathDisplay', 'startNodeDisplay', 'endNodeDisplay', 'clearPathSelectionBtn', 'h4Pathfinding', 'pPathfindingInstructions', 'labelStartNode', 'labelEndNode', 'h2KeywordSearch', 'labelSearchInput', 'searchInput', 'searchBtn', 'h3SearchResults', 'searchResultsList', 'h2OntologyEditor', 'h3EditConcepts', 'labelEditConceptSelector', 'editConceptSelector', 'labelEditConceptName', 'editConceptName', 'updateConceptBtn', 'h3EditPredicates', 'labelEditPredicateSelector', 'editPredicateSelector', 'labelEditPredicateName', 'editPredicateName', 'updatePredicateBtn'];
+        domIDs.forEach(id => dom[id] = document.getElementById(id));
+        
+        let ontologies = []; // This will now store RegIds of Ontology instances
+        let activeOntologyIndex = -1; // This will now be a RegId
+        let activeArgumentId = null; // This will now be a RegId
+        let network = null;
+        let selectedNodeId = null; // This will now be a RegId
+        let startNodeId = null; // This will now be a RegId
+        let endNodeId = null; // This will now be a RegId
+        let bothTerminalsAreSet = false; 
+        let selectedConceptToEdit = null; // RegId of concept being edited
+        let selectedPredicateToEdit = null; // RegId of predicate being edited
+        const FOUNDATIONAL_LOGIC_PREDICATES = ['AND', 'OR', 'XOR', 'CONDITIONAL', 'NEGATION'];
+        const FOUNDATIONAL_CAUSAL_PREDICATES = ['enables', 'triggers', 'contributes_to', 'prevents', 'inhibits', 'sustains'];
+        const ALL_HOP_PREDICATES = [...FOUNDATIONAL_LOGIC_PREDICATES, ...FOUNDATIONAL_CAUSAL_PREDICATES].sort();
+        
+        function getUltimateEvents(nodeIds, direction, allNodesMap, cache, visited = new Set()) {
+            const ind = pushStackTrace('getUltimateEvents');
+            let ultimateEventSet = new Set();
+             if (!nodeIds || !Array.isArray(nodeIds)) { log("getUltimateEvents called with invalid nodeIds:", nodeIds); popStackTrace(ind); return ultimateEventSet; }
+            for (const id of nodeIds) {
+                const cacheKey = `${id}|${direction}`;
+                if (cache.has(cacheKey)) { cache.get(cacheKey).forEach(eventId => ultimateEventSet.add(eventId)); continue; }
+                if (visited.has(id)) continue;
+                visited.add(id);
+                
+                const node = dr(id); 
+                
+                if (node instanceof Event) { ultimateEventSet.add(id); } 
+                else if (node instanceof Hop) {
+                    let nextNodeIds = [];
+                    if (direction === 'source') nextNodeIds = node.sourceNodeIds;
+                    else if (direction === 'target') nextNodeIds = node.targetNodeIds;
+                    else if (direction === 'holistic') nextNodeIds = [...node.sourceNodeIds, ...node.targetNodeIds];
+                    
+                    // Pass allNodesMap (which is the aggregated graph) recursively
+                    const nestedEvents = getUltimateEvents(nextNodeIds, direction, allNodesMap, cache, new Set(visited)); 
+                    nestedEvents.forEach(eventId => ultimateEventSet.add(eventId));
+                }
+            }
+            popStackTrace(ind);
+            return ultimateEventSet;
+        }
+
+        function updateDeepLinksForSingleHop(hopToUpdateId, argument, allNodesMap) {
+            const ind = pushStackTrace('updateDeepLinksForSingleHop');
+            const hopToUpdate = dr(hopToUpdateId); 
+            if (!hopToUpdate) { log(`[updateDeepLinks] Hop to update not found: ${hopToUpdateId}`); popStackTrace(ind); return; }
+            if (!argument.nodes || !argument.nodes[hopToUpdateId]) { log(`[updateDeepLinks] Argument node structure missing for hop: ${hopToUpdateId}`); argument.addNode(hopToUpdateId); }
+            
+            Object.values(argument.nodes).forEach(node => { if (node && node.id !== hopToUpdateId) { node.deepInboundLinks = node.deepInboundLinks.filter(link => link.from !== hopToUpdateId); node.deepOutboundLinks = node.deepOutboundLinks.filter(link => link.to !== hopToUpdateId); } });
+            argument.nodes[hopToUpdateId].deepInboundLinks = [];
+            argument.nodes[hopToUpdateId].deepOutboundLinks = [];
+            
+            const cache = new Map();
+            // Pass the full allNodesMap to the recursive flatteners
+            const getFlattened = (hopId, dir) => { const currentHop = dr(hopId); const idsToFlatten = currentHop ? (dir === 'source' ? currentHop.sourceNodeIds : currentHop.targetNodeIds) : []; return getUltimateEvents(idsToFlatten || [], dir, allNodesMap, cache); }
+            const getHolisticFlattened = (hopId) => { const currentHop = dr(hopId); const idsToFlatten = currentHop ? [...(currentHop.sourceNodeIds || []), ...(currentHop.targetNodeIds || [])] : []; return getUltimateEvents(idsToFlatten, 'holistic', allNodesMap, cache); }
+            
+            const hopA_strictSources = getFlattened(hopToUpdateId, 'source');
+            const hopA_strictTargets = getFlattened(hopToUpdateId, 'target');
+            const hopA_holisticBag = getHolisticFlattened(hopToUpdateId);
+            
+            for (const otherHopId_str in argument.nodes) {
+                const otherHopId = parseInt(otherHopId_str, 10);
+                if (hopToUpdateId === otherHopId) continue;
+                const otherHop = dr(otherHopId); 
+                if (!otherHop) { log(`[updateDeepLinks] Other hop not found: ${otherHopId}`); continue; }
+                if (!argument.nodes[otherHopId]) { log(`[updateDeepLinks] Argument node structure missing for other hop: ${otherHopId}`); argument.addNode(otherHopId); }
+                
+                const hopB_strictSources = getFlattened(otherHopId, 'source');
+                const hopB_strictTargets = getFlattened(otherHopId, 'target');
+                const hopB_holisticBag = getHolisticFlattened(otherHopId);
+                
+                let intersection = new Set([...hopA_strictTargets].filter(x => hopB_strictSources.has(x)));
+                if (intersection.size > 0) { const isComplete = [...hopB_strictSources].every(e => hopA_strictTargets.has(e)); argument.nodes[hopToUpdateId].deepOutboundLinks.push({ to: otherHopId, type: isComplete ? 'solid' : 'dashed' }); argument.nodes[otherHopId].deepInboundLinks.push({ from: hopToUpdateId, type: isComplete ? 'solid' : 'dashed' }); }
+                intersection = new Set([...hopB_strictTargets].filter(x => hopA_strictSources.has(x)));
+                if (intersection.size > 0) { const isComplete = [...hopA_strictSources].every(e => hopB_strictTargets.has(e)); argument.nodes[otherHopId].deepOutboundLinks.push({ to: hopToUpdateId, type: isComplete ? 'solid' : 'dashed' }); argument.nodes[hopToUpdateId].deepInboundLinks.push({ from: otherHopId, type: isComplete ? 'solid' : 'dashed' }); }
+                intersection = new Set([...hopA_holisticBag].filter(x => hopB_holisticBag.has(x)));
+                const hasCausalLink = argument.nodes[hopToUpdateId].deepOutboundLinks.some(l => l.to === otherHopId && l.type !== 'conceptual') || argument.nodes[hopToUpdateId].deepInboundLinks.some(l=>l.from === otherHopId && l.type !== 'conceptual');
+                if (intersection.size > 0 && !hasCausalLink) { argument.nodes[hopToUpdateId].deepOutboundLinks.push({ to: otherHopId, type: 'conceptual' }); argument.nodes[otherHopId].deepInboundLinks.push({ from: hopToUpdateId, type: 'conceptual' }); }
+            }
+            log(`[updateDeepLinks] Links updated for ${hopToUpdateId}:`, argument.nodes[hopToUpdateId]);
+            popStackTrace(ind);
+        }
+        
+        const getActiveOntology = () => {
+            const ind = pushStackTrace('getActiveOntology');
+            const ontInstance = dr(activeOntologyIndex);
+            popStackTrace(ind);
+            return ontInstance; 
+        };
+        
+        const getActiveArgument = () => {
+            const ind = pushStackTrace('getActiveArgument');
+            const ont = getActiveOntology();
+            let arg = null;
+            if (ont && activeArgumentId !== null) {
+                arg = dr(activeArgumentId); // activeArgumentId is a RegId
+            }
+            popStackTrace(ind);
+            return arg; 
+        };
+
+        const getSelectedValues = (sel) => Array.from(sel.selectedOptions).map(o => parseInt(o.value, 10)); // Values will be RegIds (integers)
+        
+        // REFACTORED: Implements 3D-Address dehydration
+        const saveState = () => { 
+            const ind = pushStackTrace('saveState');
+            log("[saveState] Saving state to localStorage...");
+            
+            // 1. Build global map { RegId -> { t:'C', o: ont_idx, i: arr_idx } }
+            const addressMap = new Map();
+            const ontologyMap = new Map(); // { OntRegId -> ont_idx }
+            
+            ontologies.forEach((ontRegId, ont_idx) => {
+                ontologyMap.set(ontRegId, ont_idx);
+                const ont = dr(ontRegId);
+                if (!ont) return;
+                
+                ont.concepts.forEach((regId, arr_idx) => addressMap.set(regId, { t: 'C', o: ont_idx, i: arr_idx }));
+                ont.predicates.triplet.forEach((regId, arr_idx) => addressMap.set(regId, { t: 'T', o: ont_idx, i: arr_idx }));
+                ont.graph.events.forEach((regId, arr_idx) => addressMap.set(regId, { t: 'E', o: ont_idx, i: arr_idx }));
+                ont.graph.hops.forEach((regId, arr_idx) => addressMap.set(regId, { t: 'H', o: ont_idx, i: arr_idx }));
+                ont.graph.arguments.forEach((regId, arr_idx) => addressMap.set(regId, { t: 'A', o: ont_idx, i: arr_idx }));
+            });
+
+            const serializableOntologies = ontologies.map(oRegId => {
+                const ontInstance = dr(oRegId);
+                if (ontInstance && typeof ontInstance.toJson === 'function') {
+                    // Pass all the global maps needed for correct dehydration
+                    return ontInstance.toJson({ ontologyMap, addressMap }); 
+                }
+                return null;
+            }).filter(o => o !== null); 
+            
+            localStorage.setItem('causalGraphDataV20', JSON.stringify(serializableOntologies, null, 2));
+            log(`[saveState] Saved ${serializableOntologies.length} ontologies.`);
+            popStackTrace(ind); 
+        };
+        
+        // REFACTORED: Now expects an Array of RegIds or strings
+        const populateSelect = (sel, items, config = {}) => {
+            const ind = pushStackTrace('populateSelect');
+            log(`Populating <select id="${sel.id}"> with`, items);
+            const { selected = [] } = config; 
+            sel.innerHTML = '';
+            
+            if (Array.isArray(items)) {
+                // items is an Array of RegIds or strings
+                items.forEach(item => {
+                    const option = document.createElement('option');
+                    let instance = null;
+                    if (typeof item === 'number') { // It's a RegId
+                        instance = dr(item);
+                        if(instance) {
+                            option.value = item; // The RegId
+                            option.textContent = instance.getDisplayName();
+                        } else {
+                             log(`[populateSelect] Could not dereference RegId: ${item}`);
+                             return; // skip this option
+                        }
+                    } else if (typeof item === 'string') { // It's a predicate name (from ALL_HOP_PREDICATES)
+                        option.value = item;
+                        option.textContent = item;
+                    }
+                    
+                    // Convert selected to string for comparison, as option.value is always string
+                    if (selected.map(String).includes(String(item))) {
+                        option.selected = true;
+                    }
+                    sel.appendChild(option);
+                });
+            } else {
+                 log(`[populateSelect] ERROR: 'items' is not an array.`, items);
+            }
+            popStackTrace(ind);
+        };
+        
+        const getOntologyHierarchy = (startOntologyRegId) => { 
+            const ind = pushStackTrace('getOntologyHierarchy');
+            const startOntology = dr(startOntologyRegId); 
+            if (!startOntology) { log(`[getOntologyHierarchy] Failed to find start ontology with RegId: ${startOntologyRegId}`); popStackTrace(ind); return []; }
+            const hierarchy = [startOntology.RegId]; 
+            const visited = new Set([startOntology.RegId]); 
+            const queue = [startOntology.RegId]; 
+            while (queue.length > 0) {
+                const currentRegId = queue.shift();
+                const currentOntology = dr(currentRegId);
+                if (currentOntology && currentOntology.parents) {
+                    for (const parentRegId of currentOntology.parents) { // parents is array of RegIds
+                        if (!visited.has(parentRegId)) {
+                            const parentOntology = dr(parentRegId);
+                            if (parentOntology) {
+                                visited.add(parentRegId);
+                                hierarchy.push(parentRegId);
+                                queue.push(parentRegId);
+                            } else { log(`[getOntologyHierarchy] Warning: Found parent RegId ${parentRegId} but it could not be dereferenced.`); }
+                        }
+                    }
+                }
+            }
+            popStackTrace(ind); 
+            return hierarchy; // Returns an array of RegIds
+        };
+
+        const getAggregatedData = (key, subkey, hierarchy) => { 
+            const ind = pushStackTrace('getAggregatedData');        
+            const regIdSet = new Set();
+            [...hierarchy].reverse().forEach(ontRegId => { 
+                const ontInstance = dr(ontRegId); 
+                if (!ontInstance) { log(`[getAggregatedData] Warning: Could not dereference ontology with RegId: ${ontRegId}`); return; }
+                const sourceArray = subkey ? ontInstance[key]?.[subkey] : ontInstance[key]; 
+                if(Array.isArray(sourceArray)) {
+                    sourceArray.forEach(regId => regIdSet.add(regId));
+                }
+            });  
+            log(`[getAggregatedData] Aggregated ${key}/${subkey || ''}, found ${regIdSet.size} items.`);
+            popStackTrace(ind);  
+            return Array.from(regIdSet);  // Return array of unique RegIds
+        };
+        
+        const getAggregatedGraph = (hierarchy) => { 
+            const ind = pushStackTrace('getAggregatedGraph');    
+            const aggregated = { events: {}, hops: {}, arguments: {} };
+            const eventRegIds = new Set();
+            const hopRegIds = new Set();
+            const argRegIds = new Set();
+
+            [...hierarchy].reverse().forEach(ontRegId => {
+                const ont = dr(ontRegId);
+                if (ont) {
+                    // ont.graph.events/hops/etc are ARRAYS of RegIds.
+                    ont.graph.events.forEach(regId => eventRegIds.add(regId));
+                    ont.graph.hops.forEach(regId => hopRegIds.add(regId));
+                }
+            }); 
+            
+            const activeOnt = dr(hierarchy[0]);
+            if (activeOnt) {
+                 activeOnt.graph.arguments.forEach(regId => argRegIds.add(regId));
+            }
+
+            // Convert sets to the { RegId: Instance } map structure
+            eventRegIds.forEach(regId => { const inst = dr(regId); if(inst) aggregated.events[regId] = inst; });
+            hopRegIds.forEach(regId => { const inst = dr(regId); if(inst) aggregated.hops[regId] = inst; });
+            argRegIds.forEach(regId => { const inst = dr(regId); if(inst) aggregated.arguments[regId] = inst; });
+
+            log(`[getAggregatedGraph] Aggregated graph: ${Object.keys(aggregated.events).length} events, ${Object.keys(aggregated.hops).length} hops, ${Object.keys(aggregated.arguments).length} arguments.`);
+            popStackTrace(ind); 
+            return aggregated; 
+        };
+        
+        const deserialize = (jsonString) => {
+            const ind = pushStackTrace('deserialize');
+            log('Starting deserialization and hydration from JSON string.');
+            try {
+                const data = JSON.parse(jsonString);
+                
+                // --- FORMAT DETECTION ---
+                if (!data || data.length === 0) {
+                    popStackTrace(ind);
+                    return;
+                }
+                
+                // Sniff the format
+                const isNewFormat = (data[0].concepts && Array.isArray(data[0].concepts));
+                const isOldFormat = (data[0].concepts && typeof data[0].concepts === 'object' && !Array.isArray(data[0].concepts));
+
+                // Clear the dotreg and all global state
+                dotreg.first = [];
+                dotreg.second = [];
+                ontologies = [];
+                activeOntologyIndex = -1;
+                activeArgumentId = null;
+                startNodeId = null;
+                endNodeId = null;
+                bothTerminalsAreSet = false;
+                selectedConceptToEdit = null;
+                selectedPredicateToEdit = null;
+
+                if (isNewFormat) {
+                    log("Detected: New (v19) index-based format.");
+                    hydrateFromNewFormat(data);
+                } else if (isOldFormat) {
+                    log("Detected: Old (v16) object-based format. Attempting conversion...");
+                    hydrateFromOldFormat(data);
+                } else {
+                    throw new Error("Unknown JSON format. 'concepts' and 'graph.events' are not both arrays or both objects.");
+                }
+                
+                log('Hydration successful. DotRegister is rebuilt.', dotreg);
+
+            } catch (error) {
+                console.error("Deserialization failed:", error);
+                alert("Import failed: " + error.message);
+            }
+            popStackTrace(ind);
+        };
+
+        function hydrateFromNewFormat(data) {
+            const ind = pushStackTrace('hydrateFromNewFormat');
+            
+            // --- REFACTORED per your 7-pass logic ---
+            
+            // Pass 1: Create all Ontology instances
+            data.forEach((ontData, ontIndex) => {
+                const newOntology = new Ontology(ontData.ontologyName);
+                ontologies.push(newOntology.RegId); // ontologies is now [RegId_O1, RegId_O2, ...]
+            });
+            log(`Pass 1 complete. Created ${ontologies.length} ontologies.`);
+
+            // Pass 2: Create all Concepts
+            data.forEach((ontData, ontIndex) => {
+                const ont = dr(ontologies[ontIndex]);
+                ont.concepts = (ontData.concepts || []).map(name => new Concept(name).RegId);
+            });
+            log("Pass 2 complete. Created concepts.");
+
+            // Pass 3: Create all Predicates
+            data.forEach((ontData, ontIndex) => {
+                const ont = dr(ontologies[ontIndex]);
+                ont.predicates.triplet = (ontData.predicates.triplet || []).map(name => new TripletPredicate(name).RegId);
+            });
+            log("Pass 3 complete. Created predicates.");
+            
+            // Helper function to resolve a 3D-address {t, o, i}
+            const getRegIdFromAddress = (addr) => {
+                if (!addr || addr.t === undefined || addr.o === undefined || addr.i === undefined) return null;
+                const targetOntRegId = ontologies[addr.o]; // Get ontology RegId by its index
+                const targetOnt = dr(targetOntRegId); 
+                if (!targetOnt) return null;
+                
+                switch(addr.t) {
+                    case 'C': return targetOnt.concepts[addr.i];
+                    case 'T': return targetOnt.predicates.triplet[addr.i];
+                    case 'E': return targetOnt.graph.events[addr.i];
+                    case 'H': return targetOnt.graph.hops[addr.i];
+                    case 'A': return targetOnt.graph.arguments[addr.i];
+                    default: return null;
+                }
+            };
+            
+            // Pass 4: Create Events (and link triplets)
+            data.forEach((ontData, ontIndex) => {
+                const ont = dr(ontologies[ontIndex]);
+                ont.graph.events = (ontData.graph.events || []).map(eventData => {
+                    const sourceRegId = getRegIdFromAddress(eventData.triplet.source);
+                    const predRegId = getRegIdFromAddress(eventData.triplet.predicate);
+                    const targetRegId = getRegIdFromAddress(eventData.triplet.target);
+                    return new Event(sourceRegId, predRegId, targetRegId).RegId;
+                });
+            });
+            log("Pass 4 complete. Created events.");
+            
+            // Pass 5: Create Hops (instances only)
+             data.forEach((ontData, ontIndex) => {
+                const ont = dr(ontologies[ontIndex]);
+                ont.graph.hops = (ontData.graph.hops || []).map(hopData => {
+                    return new Hop([], hopData.predicate, []).RegId; // Create with empty links
+                });
+            });
+            log("Pass 5 complete. Created hop instances.");
+            
+            // Pass 6: Link Hops
+            data.forEach((ontData, ontIndex) => {
+                const ont = dr(ontologies[ontIndex]);
+                ont.graph.hops.forEach((hopRegId, i) => {
+                    const hopInstance = dr(hopRegId);
+                    const hopData = ontData.graph.hops[i];
+                    if (hopInstance && hopData) {
+                        hopInstance.sourceNodeIds = (hopData.sourceNodeIds || []).map(getRegIdFromAddress).filter(Boolean);
+                        hopInstance.targetNodeIds = (hopData.targetNodeIds || []).map(getRegIdFromAddress).filter(Boolean);
+                    }
+                });
+            });
+            log("Pass 6 complete. Linked hops.");
+
+            // Pass 7: Create & Link Arguments
+            data.forEach((ontData, ontIndex) => {
+                const ont = dr(ontologies[ontIndex]);
+                ont.graph.arguments = (ontData.graph.arguments || []).map(argData => {
+                    const conclusionRegId = getRegIdFromAddress(argData.conclusionId) || null;
+                    const nodesObject = {}; 
+                    
+                    (argData.nodes || []).forEach(nodeData => {
+                         const hopRegId = getRegIdFromAddress(nodeData.node); // nodeData.node is {t,o,i}
+                         if(hopRegId) {
+                             nodesObject[hopRegId] = {
+                                 id: hopRegId,
+                                 deepInboundLinks: (nodeData.deepInboundLinks || []).map(link => ({ type: link.type, from: getRegIdFromAddress(link.addr) })).filter(l => l.from !== undefined && l.from !== null),
+                                 deepOutboundLinks: (nodeData.deepOutboundLinks || []).map(link => ({ type: link.type, to: getRegIdFromAddress(link) })).filter(l => l.to !== undefined && l.to !== null)
+                             };
+                         }
+                    });
+                    return new Argument(argData.name, conclusionRegId, nodesObject).RegId;
+                });
+            });
+            log("Pass 7 complete. Created and linked arguments.");
+            
+            // Final Pass: Link Ontology Parents
+            data.forEach((ontData, ontIndex) => {
+                const ont = dr(ontologies[ontIndex]);
+                if (ont) {
+                    // ontData.parents is an array of indices
+                    ont.parents = (ontData.parents || []).map(parentIndex => ontologies[parentIndex]).filter(Boolean);
+                }
+            });
+            log("Final pass complete. Linked ontology parents.");
+
+            popStackTrace(ind);
+        }
+
+        // REFACTORED: New function to handle old v16 format
+        function hydrateFromOldFormat(data) {
+            const ind = pushStackTrace('hydrateFromOldFormat');
+            
+            const ontNameMap = new Map(); // Maps { ontName: ontRegId }
+            const conceptNameMap = new Map(); // Maps { conceptName: conceptRegId }
+            const predicateNameMap = new Map(); // Maps { predName: predRegId }
+            const eventUuidMap = new Map(); // Maps { "E123...": eventRegId }
+            const hopUuidMap = new Map(); // Maps { "H123...": hopRegId }
+            
+            // Pass 1: Scan ALL ontologies to build complete maps of concepts and predicates
+            data.forEach(ontData => {
+                 for (const key in ontData.concepts) {
+                    if (!conceptNameMap.has(key)) {
+                        const newConcept = new Concept(key);
+                        conceptNameMap.set(key, newConcept.RegId);
+                    }
+                }
+                for (const key in ontData.predicates.triplet) {
+                    if (!predicateNameMap.has(key)) {
+                        const newPred = new TripletPredicate(key);
+                        predicateNameMap.set(key, newPred.RegId);
+                    }
+                }
+            });
+            log("Old format Pass 1 complete. Global maps created:", {conceptNameMap, predicateNameMap});
+
+
+            // Pass 2: Create all instances and map their OLD IDs (names/UUIDs) to their NEW RegIds
+            data.forEach(ontData => {
+                log(`Old Format Pass 2: Hydrating ${ontData.ontologyName}`);
+                
+                const conceptRegIds = Object.keys(ontData.concepts).map(key => conceptNameMap.get(key)).filter(Boolean);
+                const predicateRegIds = Object.keys(ontData.predicates.triplet).map(key => predicateNameMap.get(key)).filter(Boolean);
+                
+                const eventRegIds = [];
+                for (const id in ontData.graph.events) {
+                    const eventData = ontData.graph.events[id];
+                    const sourceRegId = conceptNameMap.get(eventData.triplet.source);
+                    const predRegId = predicateNameMap.get(eventData.triplet.predicate);
+                    const targetRegId = conceptNameMap.get(eventData.triplet.target);
+                    
+                    if(sourceRegId === undefined || predRegId === undefined || targetRegId === undefined) {
+                        log(`[hydrateOld] Skipping event "${id}" due to missing concept/predicate:`, eventData.triplet);
+                        continue;
+                    }
+                    const newEvent = new Event(sourceRegId, predRegId, targetRegId);
+                    eventRegIds.push(newEvent.RegId);
+                    eventUuidMap.set(id, newEvent.RegId); // Map "E123..." -> 101
+                }
+                
+                const hopRegIds = [];
+                for (const id in ontData.graph.hops) {
+                    const hopData = ontData.graph.hops[id];
+                    // Store old UUIDs in source/target arrays for now
+                    const newHop = new Hop(hopData.sourceNodeIds, hopData.predicate, hopData.targetNodeIds);
+                    hopRegIds.push(newHop.RegId);
+                    hopUuidMap.set(id, newHop.RegId); // Map "H456..." -> 201
+                }
+
+                const argRegIds = [];
+                for (const id in ontData.graph.arguments) {
+                    const argData = ontData.graph.arguments[id];
+                    const nodesObject = {}; // Create { RegId: { ...links } }
+                    for (const hopUuid in argData.nodes) {
+                        const hopRegId = hopUuidMap.get(hopUuid);
+                        if (hopRegId) {
+                             // Store old links (which are UUIDs), fix in Pass 2
+                            nodesObject[hopRegId] = { ...argData.nodes[hopUuid], id: hopRegId };
+                        }
+                    }
+                    // Store old conclusionId (UUID), fix in Pass 2
+                    const newArg = new Argument(argData._name || argData.name, argData.conclusionId, nodesObject);
+                    argRegIds.push(newArg.RegId);
+                }
+
+                // Store parent *names* for Pass 2
+                const newOntology = new Ontology(ontData.ontologyName, ontData.parents || [], conceptRegIds, predicateRegIds, {
+                    events: eventRegIds,
+                    hops: hopRegIds,
+                    arguments: argRegIds
+                });
+                ontologies.push(newOntology.RegId);
+                ontNameMap.set(newOntology.ontologyName, newOntology.RegId);
+            });
+
+            // Pass 3: Re-link everything
+            const allNodeUuidMap = new Map([...eventUuidMap, ...hopUuidMap]);
+            
+            ontologies.forEach(ontRegId => {
+                const ont = dr(ontRegId);
+                if (!ont) return;
+                
+                // Re-link parents (which are strings)
+                ont.parents = ont.parents.map(name => ontNameMap.get(name)).filter(Boolean);
+                
+                // Re-link Hops
+                ont.graph.hops.forEach(hopRegId => {
+                    const hop = dr(hopRegId);
+                    if (hop) {
+                        hop.sourceNodeIds = hop.sourceNodeIds.map(uuid => allNodeUuidMap.get(uuid)).filter(Boolean);
+                        hop.targetNodeIds = hop.targetNodeIds.map(uuid => allNodeUuidMap.get(uuid)).filter(Boolean);
+                    }
+                });
+                
+                // Re-link Arguments
+                ont.graph.arguments.forEach(argRegId => {
+                    const arg = dr(argRegId);
+                    if (arg) {
+                        arg.conclusionId = hopUuidMap.get(arg.conclusionId) || null; // conclusionId was an old Hop UUID
+                        // Re-link deep links
+                        for (const hopRegIdKey in arg.nodes) {
+                            const nodeData = arg.nodes[hopRegIdKey];
+                            nodeData.deepInboundLinks = (nodeData.deepInboundLinks || []).map(link => ({...link, from: hopUuidMap.get(link.from)})).filter(l => l.from);
+                            nodeData.deepOutboundLinks = (nodeData.deepOutboundLinks || []).map(link => ({...link, to: hopUuidMap.get(link.to)})).filter(l => l.to);
+                        }
+                    }
+                });
+            });
+
+            popStackTrace(ind);
+        }
+
+        const initializeCanvas = () => { const ind = pushStackTrace('initializeCanvas'); const options = { layout: { hierarchical: { enabled: false } }, edges: { arrows: 'to', font: { align: 'middle' }, smooth: true }, nodes: { borderWidth: 2 }, physics: { enabled: true, barnesHut: { gravitationalConstant: -8000, centralGravity: 0.1, springLength: 150, springConstant: 0.02, damping: 0.09, avoidOverlap: 0.1 } }, interaction: { hover: true } }; network = new vis.Network(dom.argumentCanvas, {}, options); network.on('click', handleCanvasClick); popStackTrace(ind); };
+        
+        const updateCanvasGraph = () => {
+            const ind = pushStackTrace('updateCanvasGraph');
+            log("Updating canvas graph...");
+            const argument = getActiveArgument();
+            if (!network || !argument) {
+                if(network) network.setData({nodes: [], edges: []});
+                log("No network or argument, clearing canvas.");
+                popStackTrace(ind);
+                return;
+            }
+            // Use the *active* ontology's RegId to get its hierarchy
+            const activeOntology = getActiveOntology();
+            if (!activeOntology) { popStackTrace(ind); return; } // Safety check
+            const allNodesMap = getAggregatedGraph(getOntologyHierarchy(activeOntology.RegId));
+            
+            const visNodes = [];
+            const visEdges = new Map();
+            log("Argument nodes to process:", argument.nodes);
+            
+            if (!argument.nodes || typeof argument.nodes !== 'object') {
+                 log("Error: argument.nodes is not a valid object.", argument.nodes);
+                 popStackTrace(ind);
+                 return; 
+            }
+            for (const hopId in argument.nodes) {
+                const hop = dr(hopId); // hopId is RegId, dereference it
+                if (!hop) { log(`Could not find hop with id ${hopId} in dotreg`); continue; }
+                const isLogic = FOUNDATIONAL_LOGIC_PREDICATES.includes(hop.predicate);
+                let nodeColor = undefined;
+                let borderWidth = 2;
+                if(hop.RegId === argument.conclusionId) { nodeColor = { border: 'var(--conclusion-color)', background: '#ffcdd2' }; borderWidth = 4; }
+                else if (hop.RegId === startNodeId) { nodeColor = { border: 'var(--start-node-color)', background: '#c8e6c9' }; borderWidth = 3; }
+                else if (hop.RegId === endNodeId) { nodeColor = { border: 'var(--end-node-color)', background: '#ffcdd2' }; borderWidth = 3; }
+
+                visNodes.push({ id: hop.RegId, label: hop.getDisplayName(), shape: isLogic ? 'square' : 'dot', borderWidth: borderWidth, color: nodeColor });
+                
+                const argNodeData = argument.nodes[hopId];
+                if(argNodeData && argNodeData.deepOutboundLinks){
+                    argNodeData.deepOutboundLinks.forEach(link => {
+                         if (argument.nodes[link.to]) { // Check target hop (by RegId) exists in argument
+                            const edgeId = `${hop.RegId}->${link.to}`;
+                            if (visEdges.has(edgeId) || (link.type === 'conceptual' && visEdges.has(`${link.to}->${hop.RegId}`))) return;
+                            let edgeStyle = { arrows: 'to' }; 
+                            if (link.type === 'dashed') edgeStyle = { dashes: [5, 5], arrows: 'to' };
+                            if (link.type === 'conceptual') edgeStyle = { dashes: [2, 5], color: { color: '#cccccc' }, arrows: '' }; 
+                            visEdges.set(edgeId, { from: hop.RegId, to: link.to, ...edgeStyle });
+                        } else { log(`Skipping edge from ${hop.RegId} to ${link.to} because target is not in argument nodes.`); }
+                    });
+                } else { log(`Node data or deepOutboundLinks missing for hopId: ${hopId}`); }
+            }
+            log("Setting network data:", { nodes: visNodes, edges: Array.from(visEdges.values()) });
+            network.setData({ nodes: visNodes, edges: Array.from(visEdges.values()) });
+            popStackTrace(ind);
+        };
+        function renderActiveOntologyElements() { 
+            const ind = pushStackTrace('renderActiveOntologyElements'); 
+            const ont = getActiveOntology(); 
+            const eventsList = dom.eventsDisplayList; 
+            const hopsList = dom.hopsDisplayList; 
+            eventsList.innerHTML = ''; hopsList.innerHTML = ''; 
+            if (!ont) { popStackTrace(ind); return; } 
+            
+            ont.graph.events.forEach(regId => { 
+                const event = dr(regId);
+                if (event) {
+                    const li = document.createElement('li'); 
+                    li.textContent = event.getDisplayName(); 
+                    li.title = `RegId: ${regId}`; 
+                    eventsList.appendChild(li); 
+                }
+            }); 
+            ont.graph.hops.forEach(regId => { 
+                const hop = dr(regId);
+                if (hop) {
+                    const li = document.createElement('li'); 
+                    li.textContent = hop.getDisplayName(); 
+                    li.title = `RegId: ${regId}`; 
+                    hopsList.appendChild(li); 
+                }
+            }); 
+            popStackTrace(ind); 
+        }
+
+        function render() {
+            const ind = pushStackTrace('render');
+            log('Starting main render cycle.');
+            if (activeOntologyIndex === -1 && ontologies.length > 0) {
+                 activeOntologyIndex = ontologies[0]; // Set to the RegId of the first ontology
+            }
+            saveState();
+            
+            const lang = dom.languageSelector.value;
+            const locale = locales[lang];
+            Object.keys(locale).forEach(key => {
+                if (key.endsWith('_placeholder')) {
+                    const elementId = key.replace('_placeholder', '');
+                    if (dom[elementId]) dom[elementId].placeholder = locale[key];
+                } else {
+                    if (dom[key]) dom[key].innerText = locale[key];
+                }
+            });
+
+            const activeOntology = getActiveOntology();
+            log('Active ontology:', activeOntology);
+
+            // REFACTORED: Pass array of RegIds
+            populateSelect(dom.ontologySelector, ontologies, { selected: [activeOntologyIndex] });
+            
+            // REFACTORED: Pass array of RegIds
+            const parentOptions = ontologies.filter(ontRegId => ontRegId !== activeOntologyIndex);
+            populateSelect(dom.ontologyParents, parentOptions);
+
+            if (!activeOntology) {
+                log('No active ontology. Clearing dynamic UI elements.');
+                ['eventSource', 'eventPredicateTriplet', 'eventTarget', 'hopSources', 'hopPredicate', 'hopTargets', 'argumentSelector', 'addHopToArgSelector', 'argumentConclusionSelector', 'editConceptSelector', 'editPredicateSelector'].forEach(id => {
+                    if(dom[id]) dom[id].innerHTML = '';
+                });
+                ['editConceptName', 'editPredicateName'].forEach(id => { if(dom[id]) dom[id].value = ''; });
+                updateCanvasGraph();
+                renderActiveOntologyElements();
+                popStackTrace(ind);
+                return;
+            }
+
+            const hierarchy = getOntologyHierarchy(activeOntology.RegId);
+            const conceptRegIds = getAggregatedData('concepts', null, hierarchy); // Returns [RegId, RegId, ...]
+            log('Aggregated concept RegIds:', conceptRegIds);
+            
+            const tripletPredicateRegIds = getAggregatedData('predicates', 'triplet', hierarchy); // Returns [RegId, RegId, ...]
+            log('Aggregated predicate RegIds:', tripletPredicateRegIds);
+
+            const aggregatedGraph = getAggregatedGraph(hierarchy); // Returns { events: {RegId: Inst}, hops: {RegId: Inst}, ... }
+            
+            // REFACTORED: Create arrays of RegIds for populating selectors
+            const eventRegIds = Object.keys(aggregatedGraph.events).map(id => parseInt(id, 10));
+            const hopRegIds = Object.keys(aggregatedGraph.hops).map(id => parseInt(id, 10));
+            const allNodeRegIds = [...eventRegIds, ...hopRegIds];
+            const argumentRegIds = Object.keys(aggregatedGraph.arguments).map(id => parseInt(id, 10));
+
+            populateSelect(dom.eventSource, conceptRegIds);
+            populateSelect(dom.eventTarget, conceptRegIds);
+            populateSelect(dom.eventPredicateTriplet, tripletPredicateRegIds);
+            populateSelect(dom.hopSources, allNodeRegIds, { selected: [] }); 
+            populateSelect(dom.hopTargets, allNodeRegIds, { selected: [] });
+            populateSelect(dom.hopPredicate, ALL_HOP_PREDICATES); // Pass simple array of strings
+            populateSelect(dom.argumentSelector, argumentRegIds, { selected: [activeArgumentId] });
+            populateSelect(dom.addHopToArgSelector, hopRegIds, { selected: [] });
+
+            // Populate new editor dropdowns
+            populateSelect(dom.editConceptSelector, conceptRegIds, { selected: [selectedConceptToEdit] });
+            populateSelect(dom.editPredicateSelector, tripletPredicateRegIds, { selected: [selectedPredicateToEdit] });
+            
+            // Update editor text fields
+            const conceptToEdit = dr(selectedConceptToEdit);
+            dom.editConceptName.value = conceptToEdit ? conceptToEdit.name : '';
+            const predicateToEdit = dr(selectedPredicateToEdit);
+            dom.editPredicateName.value = predicateToEdit ? predicateToEdit.name : '';
+            
+            const activeArg = getActiveArgument();
+            if(activeArg){
+                const argNodeRegIds = (activeArg.nodes && typeof activeArg.nodes === 'object') 
+                    ? Object.keys(activeArg.nodes).map(id => parseInt(id, 10)).filter(id => aggregatedGraph.hops[id]) // Get RegIds and ensure they exist
+                    : [];
+                log("Active argument nodes:", argNodeRegIds);
+                populateSelect(dom.argumentConclusionSelector, argNodeRegIds, { selected: [activeArg.conclusionId] });
+            } else {
+                 dom.argumentConclusionSelector.innerHTML = '';
+            }
+
+            // Update pathfinding displays
+            dom.startNodeDisplay.textContent = startNodeId ? (dr(startNodeId)?.getDisplayName() || `[RegId: ${startNodeId}]`) : locale.startNodeDisplay_placeholder;
+            dom.endNodeDisplay.textContent = endNodeId ? (dr(endNodeId)?.getDisplayName() || `[RegId: ${endNodeId}]`) : locale.endNodeDisplay_placeholder;
+            bothTerminalsAreSet = !!(startNodeId && endNodeId); // Update global flag
+            dom.findPathBtn.disabled = !bothTerminalsAreSet;
+            dom.tracePathsBtn.disabled = !bothTerminalsAreSet; 
+            dom.analyzeSupportBtn.disabled = !(endNodeId); // Enable if just End/Goal is set
+
+            updateCanvasGraph();
+            updateConsoleView();
+            renderActiveOntologyElements();
+            log('Render cycle complete.');
+            popStackTrace(ind);
+        }
+
+        function updateConsoleView() {
+            const ind = pushStackTrace('updateConsoleView');
+            const lang = dom.languageSelector.value;
+            const locale = locales[lang];
+            const argument = getActiveArgument();
+            const activeOntology = getActiveOntology();
+            if (!argument || !activeOntology || !selectedNodeId) {
+                dom.consoleDefaultState.style.display = 'block';
+                dom.consoleSelectedState.style.display = 'none';
+            } else {
+                dom.consoleDefaultState.style.display = 'none';
+                dom.consoleSelectedState.style.display = 'block';
+                const allNodesMap = getAggregatedGraph(getOntologyHierarchy(activeOntology.RegId));
+                const hop = dr(selectedNodeId); // selectedNodeId is a RegId
+                if (!hop) { log(`[updateConsoleView] Selected hop ${selectedNodeId} not found.`); popStackTrace(ind); return; }
+                
+                // REFACTORED: Create array of RegIds for populateSelect
+                const allSelectableNodeRegIds = [
+                    ...Object.keys(allNodesMap.events).map(id => parseInt(id, 10)),
+                    ...Object.keys(allNodesMap.hops).map(id => parseInt(id, 10))
+                ];
+
+                dom.selectedHopHeader.textContent = locale.editingHop_prefix + hop.getDisplayName(); 
+                populateSelect(dom.selectedHopSources, allSelectableNodeRegIds, { selected: hop.sourceNodeIds });
+                populateSelect(dom.selectedHopTargets, allSelectableNodeRegIds, { selected: hop.targetNodeIds });
+            }
+            popStackTrace(ind);
+        }
+        function handleCanvasClick(params) {
+             const ind = pushStackTrace('handleCanvasClick');
+            const clickedNodeId = params.nodes.length > 0 ? params.nodes[0] : null; // This will be RegId
+
+            if (params.event.srcEvent.shiftKey && clickedNodeId) {
+                log(`Shift+Click detected on node: ${clickedNodeId}`);
+                 setTerminal(clickedNodeId);
+                 updateConsoleView(); 
+                 render(); 
+            } else {
+                 selectedNodeId = clickedNodeId;
+                 log(`Normal click detected. Selected node: ${selectedNodeId}`);
+                 updateConsoleView(); 
+                 if (startNodeId || endNodeId) {
+                    startNodeId = null;
+                    endNodeId = null;
+                    bothTerminalsAreSet = false; // Update flag
+                    dom.pathDisplay.innerHTML = '';
+                    render(); 
+                 } else {
+                    updateCanvasGraph(); 
+                 }
+            }
+            popStackTrace(ind);
+        }
+
+        function setTerminal(clickedNodeId) {
+            const ind = pushStackTrace('setTerminal');
+            log(`Setting terminal node based on click: ${clickedNodeId}`);
+            if (!endNodeId) {
+                endNodeId = clickedNodeId;
+                startNodeId = null; 
+                selectedNodeId = null; 
+                log(`Set end node: ${endNodeId}`);
+            } else if (!startNodeId && clickedNodeId !== endNodeId) {
+                startNodeId = clickedNodeId;
+                selectedNodeId = null; 
+                log(`Set start node: ${startNodeId}`);
+            } else {
+                endNodeId = clickedNodeId;
+                startNodeId = null;
+                selectedNodeId = null;
+                log(`Cycle selection. Set end node: ${endNodeId}`);
+            }
+            bothTerminalsAreSet = !!(startNodeId && endNodeId); // Update global flag
+            popStackTrace(ind);
+        }
+
+
+        function findPathBidirectionalBFS(startId, endId, argumentNodes, directed = false) {
+            const ind = pushStackTrace('findPathBidirectionalBFS');
+            log(`Finding path (directed=${directed}) between ${startId} and ${endId}`);
+            if (!startId || !endId || startId === endId || !argumentNodes) { popStackTrace(ind); return null; }
+            const forwardQueue = [startId];
+            const backwardQueue = [endId];
+            const forwardVisited = { [startId]: null };
+            const backwardVisited = { [endId]: null };
+            let meetingNode = null;
+            while (forwardQueue.length > 0 || backwardQueue.length > 0) {
+                 if (forwardQueue.length > 0) {
+                    let currentForward = forwardQueue.shift();
+                    if (backwardVisited[currentForward] !== undefined) { meetingNode = currentForward; break; }
+                    const forwardNodeData = argumentNodes[currentForward];
+                    if (forwardNodeData) {
+                        (forwardNodeData.deepOutboundLinks || []).forEach(link => {
+                            if ((!directed || link.type === 'solid' || link.type === 'dashed') && argumentNodes[link.to] && forwardVisited[link.to] === undefined) {
+                                forwardVisited[link.to] = currentForward;
+                                forwardQueue.push(link.to);
+                            }
+                        });
+                        if (!directed) {
+                             (forwardNodeData.deepInboundLinks || []).forEach(link => {
+                                 if (argumentNodes[link.from] && forwardVisited[link.from] === undefined) {
+                                     forwardVisited[link.from] = currentForward; 
+                                     forwardQueue.push(link.from);
+                                 }
+                             });
+                        }
+                    }
+                }
+                 if (backwardQueue.length > 0) {
+                    let currentBackward = backwardQueue.shift();
+                    if (forwardVisited[currentBackward] !== undefined) { meetingNode = currentBackward; break; }
+                    const backwardNodeData = argumentNodes[currentBackward];
+                    if (backwardNodeData) {
+                         (backwardNodeData.deepInboundLinks || []).forEach(link => {
+                             if ((!directed || link.type === 'solid' || link.type === 'dashed') && argumentNodes[link.from] && backwardVisited[link.from] === undefined) {
+                                 backwardVisited[link.from] = currentBackward;
+                                 backwardQueue.push(link.from);
+                             }
+                         });
+                          if (!directed) {
+                             (backwardNodeData.deepOutboundLinks || []).forEach(link => {
+                                 if (argumentNodes[link.to] && backwardVisited[link.to] === undefined) {
+                                     backwardVisited[link.to] = currentBackward; 
+                                     backwardQueue.push(link.to);
+                                 }
+                             });
+                          }
+                    }
+                }
+            }
+            if (!meetingNode) { log(`No ${directed ? 'directed' : 'undirected'} path found.`); popStackTrace(ind); return null; }
+            const path = [meetingNode]; let temp = meetingNode; while (forwardVisited[temp] !== null) { path.unshift(forwardVisited[temp]); temp = forwardVisited[temp]; } temp = meetingNode; while (backwardVisited[temp] !== null) { path.push(backwardVisited[temp]); temp = backwardVisited[temp]; }
+            log(`Path (directed=${directed}) found:`, path);
+            popStackTrace(ind);
+            return path;
+        }
+
+        function topologicalSort(pathNodeIds, argumentNodes) {
+            const ind = pushStackTrace('topologicalSort');
+            log("Topologically sorting path:", pathNodeIds);
+            const adj = {};
+            const inDegree = {};
+            const pathSet = new Set(pathNodeIds);
+            pathNodeIds.forEach(id => { adj[id] = []; inDegree[id] = 0; });
+            pathNodeIds.forEach(u => {
+                const nodeData = argumentNodes[u];
+                if (nodeData) {
+                    (nodeData.deepOutboundLinks || []).forEach(link => {
+                        const v = link.to;
+                        if (pathSet.has(v) && (link.type === 'solid' || link.type === 'dashed')) { 
+                            adj[u].push(v);
+                            inDegree[v]++;
+                        }
+                    });
+                }
+            });
+            const queue = pathNodeIds.filter(id => inDegree[id] === 0);
+            const sorted = [];
+            while (queue.length > 0) {
+                const u = queue.shift();
+                sorted.push(u);
+                (adj[u] || []).forEach(v => {
+                    inDegree[v]--;
+                    if (inDegree[v] === 0) {
+                        queue.push(v);
+                    }
+                });
+            }
+            if (sorted.length !== pathNodeIds.length) {
+                log("Cycle detected during topological sort! Returning original path.", pathNodeIds);
+                popStackTrace(ind);
+                return pathNodeIds; // Return unsorted path as fallback
+            }
+            log("Topologically sorted path:", sorted);
+            popStackTrace(ind);
+            return sorted;
+        }
+
+        function findAllCommonAncestorsBFS(startId, endId, argumentNodes) {
+             const ind = pushStackTrace('findAllCommonAncestorsBFS');
+             log(`Finding all CAs for ${startId} and ${endId}`);
+             if (!startId || !endId || !argumentNodes) { popStackTrace(ind); return []; }
+
+             const startAncestors = { [startId]: { dist: 0, path: [startId] } };
+             const endAncestors = { [endId]: { dist: 0, path: [endId] } };
+             const startQueue = [startId];
+             const endQueue = [endId];
+             const commonAncestors = []; // Stores { id: caId, startPath: [...], endPath: [...] }
+
+             const visitedStart = new Set([startId]);
+             const visitedEnd = new Set([endId]);
+
+             while (startQueue.length > 0 || endQueue.length > 0) {
+                 let currentLevelSize = startQueue.length;
+                 for (let i = 0; i < currentLevelSize; i++) {
+                     const s = startQueue.shift();
+                     const sNodeData = argumentNodes[s];
+                     if (sNodeData) {
+                         (sNodeData.deepInboundLinks || []).forEach(link => {
+                             const parent = link.from;
+                             if ((link.type === 'solid' || link.type === 'dashed') && !visitedStart.has(parent) && argumentNodes[parent]) {
+                                 visitedStart.add(parent);
+                                 const newPath = [parent, ...startAncestors[s].path];
+                                 startAncestors[parent] = { dist: startAncestors[s].dist + 1, path: newPath };
+                                 startQueue.push(parent);
+                                 if (endAncestors[parent] !== undefined) {
+                                     commonAncestors.push({ id: parent, startPath: newPath, endPath: endAncestors[parent].path });
+                                 }
+                             }
+                         });
+                     }
+                 }
+                 currentLevelSize = endQueue.length;
+                  for (let i = 0; i < currentLevelSize; i++) {
+                     const e = endQueue.shift();
+                      const eNodeData = argumentNodes[e];
+                      if (eNodeData) {
+                         (eNodeData.deepInboundLinks || []).forEach(link => {
+                             const parent = link.from;
+                             if ((link.type === 'solid' || link.type === 'dashed') && !visitedEnd.has(parent) && argumentNodes[parent]) {
+                                 visitedEnd.add(parent);
+                                  const newPath = [parent, ...endAncestors[e].path];
+                                 endAncestors[parent] = { dist: endAncestors[e].dist + 1, path: newPath };
+                                 endQueue.push(parent);
+                                 if (startAncestors[parent] !== undefined) {
+                                      if (!commonAncestors.some(ca => ca.id === parent)) {
+                                          commonAncestors.push({ id: parent, startPath: startAncestors[parent].path, endPath: newPath });
+                                      }
+                                 }
+                             }
+                         });
+                     }
+                 }
+             }
+
+             log("Found Common Ancestors with paths:", commonAncestors);
+             popStackTrace(ind);
+             return commonAncestors; // Returns array of { id, startPath, endPath }
+         }
+
+        function findDirectedPathDFS(startId, endId, argumentNodes, path = [], visited = new Set()) {
+            const ind = pushStackTrace('findDirectedPathDFS');
+            path.push(startId);
+            visited.add(startId);
+            if (startId === endId) { popStackTrace(ind); return path; }
+            const startNodeData = argumentNodes[startId];
+            if (startNodeData && startNodeData.deepOutboundLinks) {
+                for (const link of startNodeData.deepOutboundLinks) {
+                    const child = link.to;
+                     if ((link.type === 'solid' || link.type === 'dashed') && !visited.has(child) && argumentNodes[child]) { 
+                        const result = findDirectedPathDFS(child, endId, argumentNodes, [...path], new Set(visited)); 
+                        if (result) { popStackTrace(ind); return result; }
+                    }
+                }
+            }
+            popStackTrace(ind);
+            return null;
+        }
+
+        // Helper to analyze links along a given path
+        function analyzePathLinks(pathIds, argumentNodes) {
+             const ind = pushStackTrace('analyzePathLinks');
+             const analysis = { solidLinks: [], dottedLinks: [] };
+             if (!pathIds || pathIds.length < 2) { popStackTrace(ind); return analysis; }
+             for (let i = 0; i < pathIds.length - 1; i++) {
+                 const fromId = pathIds[i];
+                 const toId = pathIds[i+1];
+                 const fromNodeData = argumentNodes[fromId];
+                 const link = (fromNodeData?.deepOutboundLinks || []).find(l => l.to === toId);
+                 if (link) {
+                     if (link.type === 'solid') { analysis.solidLinks.push({ from: fromId, to: toId }); }
+                     else if (link.type === 'dashed') { analysis.dottedLinks.push({ from: fromId, to: toId }); }
+                 } else { log(`Warning: Link not found between ${fromId} and ${toId} during path analysis.`); }
+             }
+             popStackTrace(ind);
+             return analysis;
+         }
+
+
+
+        function executeFindPathFunction() {
+            const ind = pushStackTrace('executeFindPathFunction');
+            const lang = dom.languageSelector.value; const locale = locales[lang]; const argument = getActiveArgument(); dom.pathDisplay.innerHTML = ''; 
+            if (!argument || !startNodeId || !endNodeId) { dom.pathDisplay.innerHTML = `<h4>${locale.pathDisplay_title}</h4><p>${locale.pathDisplay_selectNodes}</p>`; popStackTrace(ind); return; }
+            
+            const pathRegIds = findPathBidirectionalBFS(startNodeId, endNodeId, argument.nodes, false); // Undirected
+            
+            if (pathRegIds) {
+                const sortedPathRegIds = topologicalSort(pathRegIds, argument.nodes); 
+                let pathHtml = `<h4>${locale.pathDisplay_title}</h4><ol>`;
+                sortedPathRegIds.forEach(id => { 
+                    const hop = dr(id); 
+                    if (hop) { 
+                        pathHtml += `<li>${hop.getDisplayName({ detailedFormat: true })}</li>`; 
+                    } 
+                });
+                pathHtml += `</ol>`;
+                dom.pathDisplay.innerHTML = pathHtml;
+            } else { dom.pathDisplay.innerHTML = `<h4>${locale.pathDisplay_title}</h4><p>${locale.pathDisplay_noPath}</p>`; }
+            popStackTrace(ind);
+        }
+
+        function executeTracePathsFunction() {
+             const ind = pushStackTrace('executeTracePathsFunction');
+            const lang = dom.languageSelector.value; const locale = locales[lang]; const argument = getActiveArgument(); dom.pathDisplay.innerHTML = ''; 
+            if (!argument || !startNodeId || !endNodeId) { dom.pathDisplay.innerHTML = `<h4>${locale.pathDisplay_divergent_title || 'Divergent Paths:'}</h4><p>${locale.pathDisplay_selectNodes}</p>`; popStackTrace(ind); return; }
+            if (!findPathBidirectionalBFS(startNodeId, endNodeId, argument.nodes, false)) { dom.pathDisplay.innerHTML = `<h4>${locale.pathDisplay_divergent_title || 'Divergent Paths:'}</h4><p>${locale.pathDisplay_noUndirectedPath || 'No connecting path found.'}</p>`; popStackTrace(ind); return; }
+            
+            const lcaResult = findAllCommonAncestorsBFS(startNodeId, endNodeId, argument.nodes);
+            
+            let pathHtml = `<h4>${locale.pathDisplay_divergent_title || 'Divergent Paths:'}</h4>`;
+            if (lcaResult && lcaResult.length > 0) {
+                const lcaId = lcaResult[0].id; // Just take first one for now
+                const lcaHop = dr(lcaId);
+                pathHtml += `<p>${locale.pathDisplay_lca || 'Lowest Common Ancestor:'} <span class="lca-highlight">${lcaHop ? lcaHop.getDisplayName() : '['+lcaId+']'}</span></p>`;
+                
+                const pathToStart = findDirectedPathDFS(lcaId, startNodeId, argument.nodes, [], new Set());
+                const pathToEnd = findDirectedPathDFS(lcaId, endNodeId, argument.nodes, [], new Set());
+                
+                const formatPathList = (pathRegIds, title, targetNodeId) => {
+                     let listHtml = `<p><strong>${title} ${dr(targetNodeId)?.getDisplayName() || `[${targetNodeId}]`}:</strong></p><ol>`;
+                     if (pathRegIds) {
+                         pathRegIds.forEach(id => {
+                             const hop = dr(id);
+                             if (hop) {
+                                 listHtml += `<li>${hop.getDisplayName({ detailedFormat: true })}</li>`; 
+                             } else { listHtml += `<li>[${id}]</li>`; }
+                         });
+                     } else { listHtml += `<li>Error tracing path.</li>`; }
+                     listHtml += `</ol>`;
+                     return listHtml;
+                };
+                pathHtml += formatPathList(pathToStart, locale.pathDisplay_path_to || 'Path to', startNodeId);
+                if (pathToEnd && pathToEnd.length > (pathToStart && pathToStart[0] === pathToEnd[0] ? 1 : 0) ) { 
+                   pathHtml += `<div class="path-separator"></div>`;
+                   pathHtml += formatPathList(pathToEnd.slice(1), locale.pathDisplay_path_to || 'Path to', endNodeId); 
+                } else if (!pathToEnd) { pathHtml += `<div class="path-separator"></div><p>Error tracing path to ${endNodeId}.</p>`; }
+            } else { pathHtml += `<p>${locale.pathDisplay_noLCA || 'No single common ancestor found.'}</p>`; }
+            dom.pathDisplay.innerHTML = pathHtml;
+            popStackTrace(ind);
+        }
+
+        function executeArgumentAnalysis() {
+             const ind = pushStackTrace('executeArgumentAnalysis');
+             log("Executing Argument Analysis...");
+             const argument = getActiveArgument();
+             const allNodesMap = getAggregatedGraph(getOntologyHierarchy(getActiveOntology().RegId));
+             const lang = dom.languageSelector.value; 
+             const locale = locales[lang]; 
+             dom.pathDisplay.innerHTML = ''; 
+             if (!argument) { log("No active argument."); popStackTrace(ind); return; }
+
+             if (endNodeId && !startNodeId) {
+                 log(`Goal-Seeking Analysis for: ${endNodeId}`);
+                 const allPaths = findAllSolidPaths(endNodeId, argument.nodes);
+                 let pathHtml = `<h4>${locale.pathDisplay_goal_analysis_title || 'Goal Support Analysis:'}</h4>`;
+                 if (allPaths.length > 0) {
+                     pathHtml += `<p>${locale.pathDisplay_solid_paths_title || 'Fully Supported Paths:'}</p>`;
+                     allPaths.forEach((path, index) => {
+                         pathHtml += `<p><strong>Path ${index + 1}:</strong></p><ol>`;
+                         path.forEach(id => {
+                             const hop = dr(id);
+                             if (hop) {pathHtml += `<li>${hop.getDisplayName({detailedFormat: true })}</li>`;}
+                         });
+                         pathHtml += `</ol>`;
+                     });
+                 } else { pathHtml += `<p>${locale.pathDisplay_noSolidPaths || 'No fully supported paths found.'}</p>`; }
+                 dom.pathDisplay.innerHTML = pathHtml;
+             } 
+             else if (startNodeId && endNodeId) {
+                 log(`Path Analysis between ${startNodeId} and ${endNodeId}`);
+                 let analysisResult = {};
+                 let pathHtml = `<h4>${locale.pathDisplay_analysis_title || 'Path Analysis:'}</h4>`;
+                 const directPath = findDirectedPathDFS(startNodeId, endNodeId, argument.nodes, [], new Set());
+
+                 if (directPath) {
+                     log("Direct path found:", directPath);
+                     analysisResult = analyzePathLinks(directPath, argument.nodes);
+                     analysisResult.type = 'direct_path';
+                     analysisResult.path = directPath;
+                 } else {
+                     log("No direct path found. Checking for divergent paths.");
+                     if (!findPathBidirectionalBFS(startNodeId, endNodeId, argument.nodes, false)) { 
+                          analysisResult = { type: 'disconnected' };
+                     } else {
+                         const commonAncestorsData = findAllCommonAncestorsBFS(startNodeId, endNodeId, argument.nodes);
+                         if (commonAncestorsData.length > 0) {
+                             let bestLca = null;
+                             let minDashedCount = Infinity;
+                             for (const caData of commonAncestorsData) {
+                                 const lcaId = caData.id;
+                                 const pathToStart = findDirectedPathDFS(lcaId, startNodeId, argument.nodes, [], new Set());
+                                 const pathToEnd = findDirectedPathDFS(lcaId, endNodeId, argument.nodes, [], new Set());
+                                 if (pathToStart && pathToEnd) {
+                                      const analysisStart = analyzePathLinks(pathToStart, argument.nodes);
+                                      const analysisEnd = analyzePathLinks(pathToEnd, argument.nodes);
+                                      const totalDashed = analysisStart.dottedLinks.length + analysisEnd.dottedLinks.length;
+                                      if (totalDashed < minDashedCount) {
+                                          minDashedCount = totalDashed;
+                                          bestLca = { type: 'divergent_path', lca: lcaId, solidLinks: [...analysisStart.solidLinks, ...analysisEnd.solidLinks], dottedLinks: [...analysisStart.dottedLinks, ...analysisEnd.dottedLinks], pathToStart: pathToStart, pathToEnd: pathToEnd };
+                                      }
+                                 }
+                             }
+                             if (bestLca) { analysisResult = bestLca; log("Strongest LCA found:", bestLca); } 
+                             else { analysisResult = { type: 'no_lca_paths' }; log("LCA found, but error tracing forward paths."); }
+                         } else { analysisResult = { type: 'no_lca' }; log("Connected, but no common ancestor found."); }
+                     }
+                 }
+                 const formatLinksList = (links, title) => {
+                     let listHtml = `<p><strong>${title}</strong></p>`;
+                     if (links.length === 0) return listHtml + "<ul><li>None</li></ul>";
+                     listHtml += "<ul>";
+                     links.forEach(link => {
+                         const fromHop = dr(link.from);
+                         const toHop = dr(link.to);
+                         const fromName = fromHop ? fromHop.getDisplayName() : `[RegId:${link.from}]`;
+                         const toName = toHop ? toHop.getDisplayName() : `[RegId:${link.to}]`;
+                         listHtml += `<li>(${fromName}) -> (${toName})</li>`;
+                     });
+                     listHtml += "</ul>";
+                     return listHtml;
+                 };
+                 if (analysisResult.type === 'direct_path') {
+                     pathHtml += formatLinksList(analysisResult.solidLinks, locale.pathDisplay_solidLinks || "Solid Links:");
+                     pathHtml += formatLinksList(analysisResult.dottedLinks, locale.pathDisplay_dashedLinks || "Dashed (Weak) Links:");
+                 } else if (analysisResult.type === 'divergent_path') {
+                      const lcaHop = dr(analysisResult.lca);
+                      pathHtml += `<p>${locale.pathDisplay_lca || 'Strongest Common Ancestor:'} <span class="lca-highlight">${lcaHop ? lcaHop.getDisplayName() : '['+analysisResult.lca+']'}</span></p>`;
+                      pathHtml += formatLinksList(analysisResult.solidLinks, locale.pathDisplay_solidLinks || "Solid Links:");
+                      pathHtml += formatLinksList(analysisResult.dottedLinks, locale.pathDisplay_dashedLinks || "Dashed (Weak) Links:");
+                 } else if (analysisResult.type === 'disconnected') {
+                     pathHtml += `<p>${locale.pathDisplay_disconnected || 'Start and End nodes are in disconnected branches.'}</p>`;
+                 } else if (analysisResult.type === 'no_lca') {
+                     pathHtml += `<p>${locale.pathDisplay_noLCA || 'No common ancestor found.'}</p>`;
+                 } else {
+                      pathHtml += `<p>${locale.pathDisplay_noPath || 'No directed path found.'}</p>`;
+                 }
+                 dom.pathDisplay.innerHTML = pathHtml;
+             } else {
+                 dom.pathDisplay.innerHTML = `<h4>${locale.pathDisplay_analysis_title || 'Path Analysis:'}</h4><p>${locale.pathDisplay_selectGoalNode || 'Select a goal node first.'}</p>`;
+             }
+             popStackTrace(ind);
+         }
+        function findAllSolidPathsRecursive(currentId, currentPath, allPaths, argumentNodes) {
+            const ind = pushStackTrace('findAllSolidPathsRecursive');
+            currentPath.unshift(currentId); 
+            const nodeData = argumentNodes[currentId];
+            const solidInLinks = (nodeData?.deepInboundLinks || []).filter(link => link.type === 'solid');
+            if (solidInLinks.length === 0) {
+                allPaths.push([...currentPath]); 
+            } else {
+                solidInLinks.forEach(link => {
+                    if (argumentNodes[link.from]) {
+                         findAllSolidPathsRecursive(link.from, [...currentPath], allPaths, argumentNodes); 
+                    } else { log(`Warning: Solid link points to node ${link.from} not in argument nodes.`); }
+                });
+            }
+            popStackTrace(ind);
+        }
+        function findAllSolidPaths(targetId, argumentNodes) {
+             const ind = pushStackTrace('findAllSolidPaths');
+             const allPaths = [];
+             if (argumentNodes && argumentNodes[targetId]) {
+                 findAllSolidPathsRecursive(targetId, [], allPaths, argumentNodes);
+             } else { log(`Target node ${targetId} not found in argument nodes.`); }
+             log(`Found ${allPaths.length} solid paths to ${targetId}:`, allPaths);
+             popStackTrace(ind);
+             return allPaths;
+         }
+        
+        function performKeywordSearch(keyword = dom.searchInput.value.trim().toLowerCase()) {
+            const ind = pushStackTrace('performKeywordSearch');
+            const resultsList = dom.searchResultsList;
+            const locale = locales[dom.languageSelector.value];
+            resultsList.innerHTML = ''; 
+            log(`Performing search for keyword: "${keyword}"`);
+
+            if (!keyword) {
+                popStackTrace(ind);
+                return;
+            }
+
+            const results = [];
+            const foundHopRegIds = new Set(); 
+
+            ontologies.forEach(ontRegId => { 
+                const ont = dr(ontRegId); 
+                if (!ont) return;
+
+                const allNodesMap = getAggregatedGraph(getOntologyHierarchy(ont.RegId));
+                
+                ont.graph.arguments.forEach(argRegId => { 
+                    const argument = dr(argRegId); 
+                    if (!argument || !argument.nodes || typeof argument.nodes !== 'object') return;
+
+                    for (const hopRegId_str in argument.nodes) { 
+                        const hopRegId = parseInt(hopRegId_str, 10);
+                        if (foundHopRegIds.has(hopRegId)) continue; 
+
+                        const hop = dr(hopRegId); 
+                        if (!hop) continue;
+
+                        const nodeIdsToCheck = [...(hop.sourceNodeIds || []), ...(hop.targetNodeIds || [])];
+                        let matchFound = false;
+
+                        for (const nodeId of nodeIdsToCheck) { 
+                            const node = dr(nodeId); 
+
+                            if (node instanceof Event) { 
+                                // DEREFERENCE to get names for comparison
+                                const sourceName = (dr(node.triplet.source)?.getDisplayName() || '').toLowerCase();
+                                const predName = (dr(node.triplet.predicate)?.getDisplayName() || '').toLowerCase();
+                                const targetName = (dr(node.triplet.target)?.getDisplayName() || '').toLowerCase();
+                                
+                                if (sourceName.includes(keyword) || predName.includes(keyword) || targetName.includes(keyword)) {
+                                    matchFound = true;
+                                    break; 
+                                }
+                            }
+                        }
+
+                        if (matchFound) {
+                            results.push({ 
+                                hopRegId: hop.RegId, 
+                                hopName: hop.getDisplayName(), 
+                                argumentRegId: argument.RegId, 
+                                argumentName: argument.getDisplayName(),
+                                ontologyRegId: ont.RegId,
+                                ontologyName: ont.getDisplayName() 
+                            });
+                            foundHopRegIds.add(hop.RegId); 
+                        }
+                    }
+                
+            });
+		});
+            log("Search results:", results);
+
+            if (results.length === 0) {
+                resultsList.innerHTML = `<li>${locale.searchResults_noResults || 'No results found.'}</li>`;
+            } else {
+                results.forEach(res => {
+                    const li = document.createElement('li');
+                    li.textContent = `Hop: ${res.hopName} (in ${res.argumentName}, Ontology: ${res.ontologyName})`;
+                    li.style.cursor = 'pointer';
+                    li.onclick = () => {
+                        const indClick = pushStackTrace('searchResult.click');
+                        activeOntologyIndex = res.ontologyRegId;
+                        activeArgumentId = res.argumentRegId;
+                        selectedNodeId = res.hopRegId; 
+                        startNodeId = null; 
+                        endNodeId = null;
+                        bothTerminalsAreSet = false;
+                        dom.pathDisplay.innerHTML = '';
+                        render(); 
+                        updateConsoleView(); 
+                        popStackTrace(indClick);
+                    };
+                    resultsList.appendChild(li);
+                });
+            }
+            popStackTrace(ind);
+        }
+
+        // --- EVENT HANDLERS ---
+        dom.languageSelector.addEventListener('change', render);
+        dom.addOntologyBtn.addEventListener('click', () => { const ind = pushStackTrace("addOntologyBtn.click"); const name = dom.newOntologyName.value.trim(); if (name && !ontologies.some(oRegId => dr(oRegId).ontologyName === name)) { const parents = getSelectedValues(dom.ontologyParents); const newOntology = new Ontology(name, parents); ontologies.push(newOntology.RegId); activeOntologyIndex = newOntology.RegId; render(); } else { log(`[addOntologyBtn] Ontology name "${name}" is empty or already exists.`); } popStackTrace(ind); });
+        dom.ontologySelector.addEventListener('change', () => { const ind = pushStackTrace("ontologySelector.change"); activeOntologyIndex = parseInt(dom.ontologySelector.value, 10); activeArgumentId = null; selectedNodeId = null; startNodeId = null; endNodeId = null; bothTerminalsAreSet = false; if(dom.pathDisplay) dom.pathDisplay.innerHTML = ''; log(`[ontologySelector.change] Active Ontology RegId set to: ${activeOntologyIndex}`); render(); popStackTrace(ind); });
+        dom.addConceptBtn.addEventListener('click', () => { const ind = pushStackTrace("addConceptBtn.click"); const ont = getActiveOntology(); const conceptName = dom.newConcept.value.trim(); if(ont && conceptName) { if (!ont.concepts.some(regId => dr(regId)?.name === conceptName)) { const newConcept = new Concept(conceptName); ont.concepts.push(newConcept.RegId); dom.newConcept.value = ''; render(); } else { log(`[addConceptBtn] Concept "${conceptName}" already exists.`); } } else { log("[addConceptBtn] Aborted."); } popStackTrace(ind); });
+        dom.addPredicateBtn.addEventListener('click', () => { const ind = pushStackTrace("addPredicateBtn.click"); const ont = getActiveOntology(); const predicateName = dom.newPredicate.value.trim(); if(ont && predicateName) { if (!ont.predicates.triplet.some(regId => dr(regId)?.name === predicateName)) { const newPredicate = new TripletPredicate(predicateName); ont.predicates.triplet.push(newPredicate.RegId); dom.newPredicate.value = ''; render(); } else { log(`[addPredicateBtn] Predicate "${predicateName}" already exists.`); } } else { log("[addPredicateBtn] Aborted."); } popStackTrace(ind); });
+        function pushEventToOntology(ontology_RegId, source_Concept_RegId, predicate_TripletPredicate_RegId, target_Concept_RegId) { const ind = pushStackTrace("pushEventToOntology"); const ont = dr(ontology_RegId); if (ont) { const newEvent = new Event(source_Concept_RegId, predicate_TripletPredicate_RegId, target_Concept_RegId); ont.addGraphElement('events', newEvent); log(`[pushEventToOntology] Added new Event (RegId: ${newEvent.RegId}) to Ontology "${ont.getDisplayName()}".`); } else { log("[pushEventToOntology] Aborted - no active ontology."); } popStackTrace(ind); }
+        dom.addEventBtn.addEventListener('click', () => { const ind = pushStackTrace("addEventBtn.click"); const sourceRegId = parseInt(dom.eventSource.value, 10); const predicateRegId = parseInt(dom.eventPredicateTriplet.value, 10); const targetRegId = parseInt(dom.eventTarget.value, 10); if (activeOntologyIndex !== -1 && !isNaN(sourceRegId) && !isNaN(predicateRegId) && !isNaN(targetRegId)) { pushEventToOntology(activeOntologyIndex, sourceRegId, predicateRegId, targetRegId); render(); } else { log("[addEventBtn] Aborted - missing required RegIds from dropdowns."); } popStackTrace(ind); });
+        dom.addHopBtn.addEventListener('click', () => { const ind = pushStackTrace("addHopBtn.click"); const ont = getActiveOntology(); const sourceRegIds = getSelectedValues(dom.hopSources); const predicate = dom.hopPredicate.value; const targetRegIds = getSelectedValues(dom.hopTargets); if (ont && sourceRegIds.length > 0 && predicate) { const newHop = new Hop(sourceRegIds, predicate, targetRegIds); ont.addGraphElement('hops', newHop); log(`[addHopBtn] Added new Hop (RegId: ${newHop.RegId})`); render(); } else { log("[addHopBtn] Aborted."); } popStackTrace(ind); });
+        dom.addArgumentBtn.addEventListener('click', () => { const ind = pushStackTrace("addArgumentBtn.click"); const ont = getActiveOntology(); const name = dom.newArgumentName.value.trim(); if (ont && name) { const newArg = new Argument(name); ont.addGraphElement('arguments', newArg); activeArgumentId = newArg.RegId; render(); } popStackTrace(ind); });
+        dom.argumentSelector.addEventListener('change', () => { const ind = pushStackTrace("argumentSelector.change"); activeArgumentId = parseInt(dom.argumentSelector.value, 10); selectedNodeId = null; startNodeId = null; endNodeId = null; bothTerminalsAreSet = false; if(dom.pathDisplay) dom.pathDisplay.innerHTML = ''; log(`[argumentSelector.change] Active Argument RegId set to: ${activeArgumentId}`); render(); popStackTrace(ind); });
+        dom.addHopToArgumentBtn.addEventListener('click', () => { const ind = pushStackTrace('addHopToArgumentBtn.click'); const arg = getActiveArgument(); const ont = getActiveOntology(); const hopRegId = parseInt(dom.addHopToArgSelector.value, 10); if (arg && ont && !isNaN(hopRegId) && dr(hopRegId)) { arg.addNode(hopRegId); const allNodesMap = getAggregatedGraph(getOntologyHierarchy(ont.RegId)); updateDeepLinksForSingleHop(hopRegId, arg, allNodesMap); render(); } popStackTrace(ind); });
+        dom.setConclusionBtn.addEventListener('click', () => { const ind = pushStackTrace('setConclusionBtn.click'); const arg = getActiveArgument(); if (arg) { arg.conclusionId = parseInt(dom.argumentConclusionSelector.value, 10); render(); } popStackTrace(ind); });
+        dom.setAsConclusionBtn.addEventListener('click', () => { const ind = pushStackTrace('setAsConclusionBtn.click'); const arg = getActiveArgument(); if (arg && selectedNodeId) { arg.conclusionId = selectedNodeId; render(); } popStackTrace(ind); });
+        const updateSelectedHop = () => {
+             const ind = pushStackTrace('updateSelectedHop');
+             const arg = getActiveArgument(); const ont = getActiveOntology();
+             if (arg && selectedNodeId && dr(selectedNodeId)) {
+                 const hop = dr(selectedNodeId); // It's a Hop instance
+                 hop.sourceNodeIds = getSelectedValues(dom.selectedHopSources);
+                 hop.targetNodeIds = getSelectedValues(dom.selectedHopTargets);
+                 const allNodesMap = getAggregatedGraph(getOntologyHierarchy(ont.RegId));
+                 updateDeepLinksForSingleHop(selectedNodeId, arg, allNodesMap);
+                 render();
+             }
+             popStackTrace(ind);
+        };
+        dom.selectedHopSources.addEventListener('change', updateSelectedHop);
+        dom.selectedHopTargets.addEventListener('change', updateSelectedHop);
+        
+        // REFACTORED: This is the critical fix.
+        dom.exportBtn.addEventListener('click', () => { 
+            const ind = pushStackTrace('exportBtn.click'); 
+            const locale = locales[dom.languageSelector.value]; 
+            
+            // 1. Build global map { RegId -> { t:'C', o: ont_idx, i: arr_idx } }
+            const addressMap = new Map();
+            const ontologyMap = new Map(); // { OntRegId -> ont_idx }
+            
+            ontologies.forEach((ontRegId, ont_idx) => {
+                ontologyMap.set(ontRegId, ont_idx);
+                const ont = dr(ontRegId);
+                if (!ont) return;
+                
+                ont.concepts.forEach((regId, arr_idx) => addressMap.set(regId, { t: 'C', o: ont_idx, i: arr_idx }));
+                ont.predicates.triplet.forEach((regId, arr_idx) => addressMap.set(regId, { t: 'T', o: ont_idx, i: arr_idx }));
+                ont.graph.events.forEach((regId, arr_idx) => addressMap.set(regId, { t: 'E', o: ont_idx, i: arr_idx }));
+                ont.graph.hops.forEach((regId, arr_idx) => addressMap.set(regId, { t: 'H', o: ont_idx, i: arr_idx }));
+                ont.graph.arguments.forEach((regId, arr_idx) => addressMap.set(regId, { t: 'A', o: ont_idx, i: arr_idx }));
+            });
+
+            // 3. Pass ALL maps to toJson
+            dom.jsonOutput.value = JSON.stringify(ontologies.map(oRegId => {
+                const ontInst = dr(oRegId);
+                return ontInst ? ontInst.toJson({ ontologyMap, addressMap }) : null;
+            }).filter(Boolean), null, 2); 
+
+            alert(locale.alert_graphExported); 
+            popStackTrace(ind); 
+        });
+        
+        dom.importBtn.addEventListener('click', () => { const ind = pushStackTrace('importBtn.click'); const locale = locales[dom.languageSelector.value]; const jsonString = dom.jsonOutput.value; if (!jsonString || !confirm(locale.confirm_overwrite)) { popStackTrace(ind); return; } deserialize(jsonString); activeOntologyIndex = ontologies.length > 0 ? ontologies[0] : -1; activeArgumentId = null; startNodeId = null; endNodeId = null; dom.pathDisplay.innerHTML = ''; render(); alert(locale.alert_graphImported); popStackTrace(ind); });
+        dom.clearPathSelectionBtn.addEventListener('click', () => { const ind = pushStackTrace('clearPathSelectionBtn.click'); log("Clearing path selection."); startNodeId = null; endNodeId = null; bothTerminalsAreSet = false; dom.pathDisplay.innerHTML = ''; render(); popStackTrace(ind); });
+        
+        dom.findPathBtn.addEventListener('click', executeFindPathFunction); 
+        dom.tracePathsBtn.addEventListener('click', executeTracePathsFunction);        
+		dom.searchBtn.addEventListener('click', () => performKeywordSearch());
+		dom.analyzeSupportBtn.addEventListener('click', executeArgumentAnalysis);
+		 
+        // --- NEW Ontology Editor Listeners ---
+        dom.editConceptSelector.addEventListener('change', () => {
+            const ind = pushStackTrace("editConceptSelector.change");
+            selectedConceptToEdit = parseInt(dom.editConceptSelector.value, 10);
+            const concept = dr(selectedConceptToEdit);
+            dom.editConceptName.value = concept ? concept.name : '';
+            popStackTrace(ind);
+        });
+
+        dom.updateConceptBtn.addEventListener('click', () => {
+            const ind = pushStackTrace("updateConceptBtn.click");
+            const ont = getActiveOntology();
+            const newName = dom.editConceptName.value.trim();
+            if (ont && selectedConceptToEdit !== null  && !isNaN(selectedConceptToEdit)) {
+                const conceptInstance = dr(selectedConceptToEdit);
+                if (!conceptInstance) { log("Error: Concept instance not found."); popStackTrace(ind); return; }
+
+                if (newName) { // This is an UPDATE 
+                    if (conceptInstance) {
+                        log(`Updating Concept (RegId: ${selectedConceptToEdit}) to "${newName}"`);
+                        conceptInstance.name = newName; 
+                    }
+                } else { // This is a DELETE
+                    log(`Deleting Concept ${conceptInstance.name} (RegId: ${selectedConceptToEdit})`);
+                    // Find and remove the RegId from the ontology's array
+                    const index = ont.concepts.indexOf(selectedConceptToEdit);
+                    if (index > -1) {
+                        ont.concepts.splice(index, 1);
+                        log(`Spliced RegId ${selectedConceptToEdit} from ontology concepts.`);
+                    }
+                    // We will not popnum from dotreg, as it could break other references.
+                    // It is now an "orphaned" concept, which is safer.
+                    // We also need to find all Events using it and handle them...
+                    // For now, per prompt, just splicing from array.
+                    selectedConceptToEdit = null; // Reset selection
+                }
+                render();
+            }
+            popStackTrace(ind);
+        });
+        
+        dom.editPredicateSelector.addEventListener('change', () => {
+            const ind = pushStackTrace("editPredicateSelector.change");
+            selectedPredicateToEdit = parseInt(dom.editPredicateSelector.value, 10);
+            const predicate = dr(selectedPredicateToEdit);
+            dom.editPredicateName.value = predicate ? predicate.name : '';
+            popStackTrace(ind);
+        });
+
+       dom.updatePredicateBtn.addEventListener('click', () => {
+            const ind = pushStackTrace("updatePredicateBtn.click");
+            const ont = getActiveOntology();
+            const newName = dom.editPredicateName.value.trim();
+            
+            // Validation: Ensure we have a valid integer RegId
+            if (ont && selectedPredicateToEdit !== null && !isNaN(selectedPredicateToEdit)) {
+                const predicateInstance = dr(selectedPredicateToEdit);
+
+                if (newName) { 
+                    // --- UPDATE (RENAME) ---
+                    // USE dr() to get the object and change its property
+                    if (predicateInstance) {
+                        log(`Updating Predicate (RegId: ${selectedPredicateToEdit}) from "${predicateInstance.name}" to "${newName}"`);
+                        predicateInstance.name = newName;
+                    } else {
+                        log("Error: Predicate instance not found via dr().");
+                    }
+                } else { 
+                    // --- DELETE ---
+                    // USE indexOf() to find its spot in the list and remove it
+                    log(`Deleting Predicate (RegId: ${selectedPredicateToEdit})`);
+                    const index = ont.predicates.triplet.indexOf(selectedPredicateToEdit);
+                    if (index > -1) {
+                        ont.predicates.triplet.splice(index, 1);
+                    }
+                    selectedPredicateToEdit = null; // Clear selection after delete
+                    dom.editPredicateName.value = '';
+                }
+                render();
+            } else {
+                log("Error: No valid predicate selected to update.");
+            }
+            popStackTrace(ind);
+        });
+		
+        initializeCanvas();
+        const savedData = localStorage.getItem('causalGraphDataV20'); // Use new key
+        if (savedData) { log('[init] Found saved data. Deserializing...'); deserialize(savedData); } else { log('[init] No saved data found.'); }
+        render();
+    });
+    </script>
+</body>
+</html>
+

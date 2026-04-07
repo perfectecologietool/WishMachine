@@ -1,0 +1,2300 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Temporal Nexus </title>
+    <scriptd type="text/javascript" src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js">
+        </script>
+        <script src="vis-network.min.js"></script>
+        <style>
+            /* --- STYLES (Preserved from v13.6) --- */
+            :root {
+                --bg-color: #0f0f1a;
+                --historian-bg: #1a1a2e;
+                --architect-bg: #16213e;
+                --engine-bg: #0a0a12;
+                --innovation-bg: #0f1515;
+                --dock-bg: #1a1a20;
+                --text-color: #e2e2e2;
+                --accent-gold: #ffd700;
+                --accent-cyan: #00fff2;
+                --accent-green: #00ff41;
+                --accent-orange: #ff9900;
+                --accent-red: #ff4444;
+                --accent-purple: #d500f9;
+                --input-bg: #050505;
+                --input-border: #333;
+                --node-commit: #4ecdc4;
+                --col-layer1: #fff59d;
+                --col-layer2: #ef9a9a;
+                --col-layer3: #a5d6a7;
+                --col-layer4: #90caf9;
+            }
+
+            * {
+                box-sizing: border-box;
+                -webkit-tap-highlight-color: transparent;
+            }
+
+            body {
+                margin: 0;
+                padding: 0;
+                font-family: 'Courier New', monospace;
+                background-color: var(--bg-color);
+                color: var(--text-color);
+                height: 100vh;
+                width: 100vw;
+                display: flex;
+                flex-direction: column;
+                overflow: hidden;
+            }
+
+            header {
+                height: 45px;
+                background: #000;
+                border-bottom: 2px solid #333;
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                padding: 0 10px;
+                z-index: 20;
+                flex-shrink: 0;
+            }
+
+            #controls-area {
+                display: flex;
+                gap: 5px;
+                overflow-x: auto;
+                align-items: center;
+                width: 100%;
+                justify-content: flex-end;
+            }
+
+            #search-container {
+                position: relative;
+                width: 150px;
+                flex-shrink: 0;
+            }
+
+            #search-input {
+                width: 100%;
+                background: #111;
+                border: 1px solid #444;
+                color: var(--accent-gold);
+                padding: 5px;
+                font-family: inherit;
+                font-size: 12px;
+            }
+
+            .header-btn {
+                background: #444;
+                color: white;
+                padding: 5px 10px;
+                border: 1px solid #666;
+                margin-left: 5px;
+                font-size: 11px;
+                cursor: pointer;
+                white-space: nowrap;
+                border-radius: 3px;
+            }
+
+            #workspace {
+                display: flex;
+                flex: 1;
+                position: relative;
+                height: calc(100vh - 125px);
+                flex-direction: row;
+            }
+
+            #left-col {
+                flex: 1;
+                border-right: 4px solid #000;
+                display: flex;
+                flex-direction: column;
+                min-width: 0;
+            }
+
+            #right-col {
+                flex: 3;
+                display: flex;
+                flex-direction: column;
+                min-width: 0;
+            }
+
+            @media (max-width: 768px) {
+                #workspace {
+                    flex-direction: column;
+                    height: calc(100vh - 45px - 85px);
+                    padding-bottom: 5px;
+                }
+
+                #left-col {
+                    flex: 1;
+                    border-right: none;
+                    border-bottom: 4px solid #000;
+                    max-height: 30%;
+                }
+
+                #right-col {
+                    flex: 2;
+                }
+
+                #action-dock {
+                    position: fixed;
+                    bottom: 0;
+                    left: 0;
+                    width: 100%;
+                    z-index: 1000;
+                    padding: 0 5px;
+                }
+            }
+
+            .panel {
+                position: relative;
+                overflow: hidden;
+                flex: 1;
+            }
+
+            #historian-panel {
+                background-color: var(--historian-bg);
+            }
+
+            #architect-panel {
+                flex: 1.5;
+                background-color: var(--architect-bg);
+                border-bottom: 4px solid #000;
+            }
+
+            #lower-right-panel {
+                flex: 1;
+                display: flex;
+                flex-direction: column;
+                background-color: var(--engine-bg);
+                position: relative;
+            }
+
+            #viz-engine,
+            #viz-innovation,
+            #viz-tasks {
+                width: 100%;
+                height: 100%;
+                position: absolute;
+                top: 0;
+                left: 0;
+            }
+
+            #viz-innovation {
+                background-color: var(--innovation-bg);
+                visibility: hidden;
+            }
+
+            #viz-tasks {
+                background-color: #0d1117;
+                visibility: hidden;
+            }
+
+            .tab-bar {
+                position: absolute;
+                top: 0;
+                right: 0;
+                z-index: 50;
+                display: flex;
+            }
+
+            .tab-btn {
+                background: #222;
+                border: none;
+                color: #666;
+                padding: 5px 15px;
+                cursor: pointer;
+                font-family: inherit;
+                font-size: 10px;
+                font-weight: bold;
+                border-bottom: 2px solid transparent;
+            }
+
+            .tab-btn.active {
+                background: #111;
+                color: #fff;
+            }
+
+            #tab-eng.active {
+                border-bottom-color: var(--accent-orange);
+                color: var(--accent-orange);
+            }
+
+            #tab-inn.active {
+                border-bottom-color: var(--accent-purple);
+                color: var(--accent-purple);
+            }
+
+            #tab-tsk.active {
+                border-bottom-color: var(--col-layer4);
+                color: var(--col-layer4);
+            }
+
+            .panel-label {
+                position: absolute;
+                top: 5px;
+                left: 5px;
+                font-weight: bold;
+                opacity: 0.9;
+                pointer-events: none;
+                z-index: 10;
+                background: rgba(0, 0, 0, 0.6);
+                padding: 2px 6px;
+                border-radius: 4px;
+                font-size: 10px;
+            }
+
+            #lbl-hist {
+                color: var(--accent-gold);
+                border: 1px solid var(--accent-gold);
+            }
+
+            #lbl-arch {
+                color: var(--accent-cyan);
+                border: 1px solid var(--accent-cyan);
+            }
+
+            #lbl-lower {
+                color: var(--accent-orange);
+                border: 1px solid var(--accent-orange);
+            }
+
+            #viz-historian,
+            #viz-architect {
+                width: 100%;
+                height: 100%;
+            }
+
+            #action-dock {
+                height: 80px;
+                background-color: var(--dock-bg);
+                border-top: 2px solid var(--accent-cyan);
+                display: flex;
+                align-items: center;
+                padding: 0 20px;
+                gap: 15px;
+                z-index: 100;
+                box-shadow: 0 -5px 20px rgba(0, 0, 0, 0.5);
+                overflow-x: auto;
+                overflow-y: hidden;
+                white-space: nowrap;
+                -webkit-overflow-scrolling: touch;
+            }
+
+            #action-dock::-webkit-scrollbar {
+                height: 4px;
+            }
+
+            #action-dock::-webkit-scrollbar-thumb {
+                background: #444;
+                border-radius: 2px;
+            }
+
+            .dock-section {
+                display: flex;
+                align-items: center;
+                gap: 10px;
+                padding-right: 20px;
+                border-right: 1px solid #444;
+                height: 100%;
+                flex-shrink: 0;
+            }
+
+            .dock-info {
+                font-size: 12px;
+                color: #888;
+                display: flex;
+                flex-direction: column;
+                justify-content: center;
+                min-width: 200px;
+            }
+
+            .dock-info-title {
+                font-size: 14px;
+                color: #fff;
+                font-weight: bold;
+                margin-bottom: 4px;
+                white-space: nowrap;
+                overflow: hidden;
+                text-overflow: ellipsis;
+                max-width: 250px;
+            }
+
+            .dock-info-sub {
+                font-size: 10px;
+                color: var(--accent-cyan);
+                text-transform: uppercase;
+            }
+
+            .dock-btn {
+                background: #222;
+                color: #ccc;
+                border: 1px solid #444;
+                padding: 5px 10px;
+                font-family: inherit;
+                font-size: 11px;
+                font-weight: bold;
+                cursor: pointer;
+                transition: all 0.2s;
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                justify-content: center;
+                height: 50px;
+                min-width: 70px;
+                border-radius: 4px;
+                flex-shrink: 0;
+            }
+
+            .dock-btn:hover:not(:disabled) {
+                background: #333;
+                color: #fff;
+                border-color: #666;
+                transform: translateY(-2px);
+            }
+
+            .dock-btn:disabled {
+                opacity: 0.3;
+                cursor: not-allowed;
+                transform: none;
+            }
+
+            .btn-green {
+                border-color: #004400;
+                color: var(--accent-green);
+            }
+
+            .btn-green:hover:not(:disabled) {
+                background: #002200;
+                border-color: var(--accent-green);
+            }
+
+            .btn-cyan {
+                border-color: #004444;
+                color: var(--accent-cyan);
+            }
+
+            .btn-cyan:hover:not(:disabled) {
+                background: #002222;
+                border-color: var(--accent-cyan);
+            }
+
+            .btn-red {
+                border-color: #440000;
+                color: var(--accent-red);
+            }
+
+            .btn-red:hover:not(:disabled) {
+                background: #220000;
+                border-color: var(--accent-red);
+            }
+
+            .modal-overlay {
+                display: none;
+                position: fixed;
+                top: 0;
+                left: 0;
+                width: 100%;
+                height: 100%;
+                background: rgba(0, 0, 0, 0.9);
+                z-index: 2000;
+                justify-content: center;
+                align-items: center;
+            }
+
+            .modal {
+                background: #151520;
+                border: 1px solid #444;
+                padding: 20px;
+                width: 90%;
+                max-width: 700px;
+                max-height: 90vh;
+                overflow-y: auto;
+                display: flex;
+                flex-direction: column;
+                box-shadow: 0 0 50px rgba(0, 0, 0, 0.8);
+            }
+
+            .modal h2 {
+                margin-top: 0;
+                border-bottom: 1px solid #444;
+                padding-bottom: 10px;
+                color: var(--accent-cyan);
+            }
+
+            .form-group {
+                margin-bottom: 15px;
+            }
+
+            .form-label {
+                display: block;
+                color: #888;
+                font-size: 11px;
+                margin-bottom: 4px;
+                text-transform: uppercase;
+                letter-spacing: 1px;
+            }
+
+            .form-input {
+                width: 100%;
+                background: var(--input-bg);
+                border: 1px solid var(--input-border);
+                color: #fff;
+                padding: 8px;
+                font-family: inherit;
+                box-sizing: border-box;
+            }
+
+            .question-list {
+                border-left: 2px solid #333;
+                padding-left: 10px;
+                margin-top: 5px;
+            }
+
+            .q-item {
+                margin-bottom: 8px;
+            }
+
+            .q-label {
+                display: block;
+                color: #aaa;
+                font-size: 10px;
+                margin-bottom: 2px;
+            }
+
+            .q-input {
+                width: 100%;
+                background: #080808;
+                border: 1px solid #333;
+                color: #ddd;
+                font-size: 12px;
+                padding: 4px;
+            }
+
+            .protocol-grid {
+                display: grid;
+                grid-template-columns: 1fr 1fr;
+                gap: 10px;
+                margin-top: 10px;
+            }
+
+            .proto-box {
+                background: #111;
+                padding: 10px;
+                border: 1px solid #333;
+            }
+
+            .proto-header {
+                color: var(--node-commit);
+                font-size: 10px;
+                font-weight: bold;
+                margin-bottom: 5px;
+                text-transform: uppercase;
+            }
+
+            .btn-row {
+                display: flex;
+                gap: 10px;
+                margin-top: 20px;
+            }
+
+            .btn {
+                padding: 8px 12px;
+                border: none;
+                cursor: pointer;
+                font-weight: bold;
+                flex: 1;
+                font-size: 12px;
+                border-radius: 3px;
+            }
+
+            .btn-primary {
+                background: var(--accent-cyan);
+                color: #000;
+            }
+
+            .btn-cancel {
+                background: #222;
+                color: #aaa;
+                border: 1px solid #444;
+            }
+
+            .btn-purple {
+                background: var(--accent-purple);
+                color: #fff;
+            }
+
+            .sci-grid {
+                display: grid;
+                grid-template-columns: 1fr 1fr;
+                gap: 15px;
+            }
+
+            .sci-box {
+                border: 1px solid #333;
+                padding: 10px;
+                background: #080808;
+            }
+
+            .sci-header {
+                color: var(--accent-purple);
+                font-weight: bold;
+                font-size: 11px;
+                margin-bottom: 5px;
+                text-transform: uppercase;
+            }
+
+            .sci-textarea {
+                width: 100%;
+                height: 60px;
+                background: #111;
+                color: #ddd;
+                border: none;
+                font-family: inherit;
+                resize: vertical;
+                font-size: 12px;
+                box-sizing: border-box;
+            }
+
+            .help-section {
+                margin-bottom: 15px;
+                border-left: 2px solid var(--accent-cyan);
+                padding-left: 10px;
+            }
+
+            .help-title {
+                color: var(--accent-gold);
+                font-weight: bold;
+                font-size: 12px;
+                text-transform: uppercase;
+                margin-bottom: 5px;
+            }
+
+            .help-text {
+                color: #ccc;
+                font-size: 11px;
+                margin-bottom: 2px;
+            }
+
+            #error-banner {
+                display: none;
+                background: #500;
+                color: #fff;
+                padding: 10px;
+                text-align: center;
+                position: fixed;
+                top: 0;
+                width: 100%;
+                z-index: 9999;
+            }
+
+            #file-input {
+                display: none;
+            }
+
+            /* SPOILAGE ALERT */
+            #spoilage-overlay {
+                display: none;
+                position: fixed;
+                top: 50px;
+                right: 20px;
+                width: 330px;
+                background: rgba(0, 0, 0, 0.95);
+                border: 1px solid var(--accent-red);
+                z-index: 5000;
+                padding: 10px;
+                flex-direction: column;
+                gap: 5px;
+                box-shadow: 0 5px 15px rgba(0, 0, 0, 0.5);
+            }
+
+            .spoil-item {
+                color: #fff;
+                font-size: 11px;
+                padding: 8px;
+                border-bottom: 1px solid #333;
+                display: flex;
+                justify-content: space-between;
+                cursor: pointer;
+                transition: background 0.2s;
+            }
+
+            .spoil-item:hover {
+                background: #221;
+            }
+
+            .spoil-critical {
+                color: var(--accent-red);
+                font-weight: bold;
+            }
+
+            .spoil-warn {
+                color: var(--accent-orange);
+            }
+        </style>
+</head>
+
+<body>
+    <div id="error-banner"></div>
+    <div id="spoilage-overlay">
+        <div
+            style="color:var(--accent-red); font-weight:bold; border-bottom:1px solid #555; padding-bottom:5px; margin-bottom:5px;">
+            ⚠️ SPOILAGE DETECTED</div>
+        <div id="spoilage-list"></div>
+        <button onclick="document.getElementById('spoilage-overlay').style.display='none'"
+            style="margin-top:5px; background:#333; color:#ccc; border:none; padding:5px; cursor:pointer; width:100%;">DISMISS</button>
+    </div>
+
+    <header>
+        <h1>TEMPORAL NEXUS <span style="font-size:12px; opacity:0.6;">v14.0 OOP</span></h1>
+        <div id="controls-area">
+            <div id="search-container"><input type="text" id="search-input" placeholder="Search..."
+                    onkeydown="NexusSystem.instance.handleSearch(event)"></div>
+            <!-- Timer moved to Dock -->
+            <button class="header-btn" style="background:#554466; border-color:#d500f9;"
+                onclick="NexusSystem.instance.openHelp()">Help?</button>
+            <button class="header-btn" style="background:#224422; border-color:#00ff41;"
+                onclick="NexusSystem.instance.applyStandardLayout()">⫠ Tree</button>
+            <button class="header-btn" style="background:#332244; border-color:#d500f9;"
+                onclick="NexusSystem.instance.downloadTextReport()">📄 TEXT</button>
+            <button class="header-btn" onclick="NexusSystem.instance.downloadJSON()">⇩ JSON</button>
+            <button class="header-btn" onclick="document.getElementById('file-input').click()">⇧ Load</button>
+            <button class="header-btn" style="background:#552222; border-color:red;"
+                onclick="NexusSystem.instance.emergencyWipe()">⚠️</button>
+            <input type="file" id="file-input" accept=".json" onchange="NexusSystem.instance.loadJSON(this)">
+        </div>
+    </header>
+
+    <div id="workspace">
+        <div id="left-col">
+            <div id="historian-panel" class="panel">
+                <div id="lbl-hist" class="panel-label">
+                    <button class="header-btn" style="padding:2px 5px; font-size:10px; pointer-events:auto;"
+                        onclick="NexusSystem.instance.switchHistorianTab('history')">HISTORY</button>
+                    <button class="header-btn" style="padding:2px 5px; font-size:10px; pointer-events:auto;"
+                        onclick="NexusSystem.instance.switchHistorianTab('innovation')">INNOVATION</button>
+                </div>
+                <div id="viz-historian"></div>
+            </div>
+        </div>
+        <div id="right-col">
+            <div id="architect-panel" class="panel">
+                <div id="lbl-arch" class="panel-label">ARCHITECT ►</div>
+                <div id="viz-architect"></div>
+            </div>
+            <div id="lower-right-panel">
+                <div class="tab-bar">
+                    <button id="tab-eng" class="tab-btn active" onclick="NexusSystem.instance.switchTab('engine')">▼
+                        ENGINE</button>
+                    <button id="tab-tsk" class="tab-btn" onclick="NexusSystem.instance.switchTab('tasks')">🏗️
+                        BLUEPRINT</button>
+                    <!-- Innovation Tab Removed/Hidden -->
+                </div>
+                <div id="lbl-lower" class="panel-label">▼ ENGINE ROOM</div>
+                <div id="viz-engine"></div>
+                <div id="viz-tasks"></div>
+                <div id="viz-innovation"></div>
+            </div>
+        </div>
+    </div>
+
+    <div id="action-dock">
+        <div class="dock-section">
+            <div class="dock-info">
+                <div id="dock-title" class="dock-info-title">NO SELECTION</div>
+                <div id="dock-sub" class="dock-info-sub">Tap Node to Select</div>
+            </div>
+        </div>
+        <div class="dock-section">
+            <button id="btn-edit" class="dock-btn btn-cyan" onclick="NexusSystem.instance.triggerAction('edit')"
+                disabled><span>EDIT</span></button>
+            <button id="btn-commit" class="dock-btn" onclick="NexusSystem.instance.triggerAction('commit')"
+                disabled><span>COMMIT</span></button>
+        </div>
+        <div class="dock-section"
+            style="border-left: 1px solid #444; padding-left: 10px; display:flex; align-items:center;">
+            <button class="dock-btn" onclick="NexusSystem.instance.toggleTimer()"><span>⏱️ TIMER</span></button>
+            <div id="dock-timer-display" style="font-family:monospace; color:#0f0; font-size:14px; margin-left:10px;">
+                READY</div>
+        </div>
+        <div class="dock-section">
+            <button id="btn-active" class="dock-btn btn-green" onclick="NexusSystem.instance.setStatus('active')"
+                disabled><span>ACT</span></button>
+            <button id="btn-complete" class="dock-btn" onclick="NexusSystem.instance.setStatus('complete')"
+                style="color:#ffd700; border-color:#554400;" disabled><span>DONE</span></button>
+            <button id="btn-delete" class="dock-btn btn-red" onclick="NexusSystem.instance.triggerAction('delete')"
+                disabled><span>DEL</span></button>
+        </div>
+    </div>
+
+    <div id="help-overlay" class="modal-overlay" style="z-index: 3000;">
+        <div class="modal" style="border-color: #ffd700;">
+            <h2 style="color: #ffd700;">🌟 HOW TO USE</h2>
+            <div style="color: #ddd; font-size: 13px; line-height: 1.6; margin-bottom: 20px;">
+                <p>Welcome to Temporal Nexus OOP! Optimized for stability and scale.</p>
+                <div class="help-section">
+                    <div class="help-title">🏗️ THE ARCHITECT</div>
+                    <div class="help-text">• Your map of nodes</div>
+                    <div class="help-text">• Tap a node to select it!</div>
+                    <div class="help-text">• Double-tap empty space to create a root!</div>
+                    <div class="help-text">• Double-tap a node to edit details!</div>
+                </div>
+                <div class="help-section">
+                    <div class="help-title">🏗️ THE BLUEPRINT</div>
+                    <div class="help-text">• Tap a node to select it!</div>
+                    <div class="help-text">• Double-tap empty space to create a root!</div>
+                    <div class="help-text">• Double-tap a node to edit details!</div>
+                </div>
+				                <div class="help-section" style="border-color: var(--accent-gold);">
+                    <div class="help-title">📜 THE HISTORIAN</div>
+                    <div class="help-text">• This tracks your past!</div>
+                    <div class="help-text">• Nodes go Left to Right (Time).</div>
+                    <div class="help-text">• Commits drop Down (Updates).</div>
+                    <div class="help-text">• Double-tap to add a commit! Record your wins!</div>
+                </div>
+                <div class="help-section" style="border-color: var(--accent-purple);">
+                    <div class="help-title">⚗️ THE INNOVATION LAB</div>
+                    <div class="help-text">• When you work, work to prove your hypothesis!</div>
+                    <div class="help-text">• Double-tap empty space for a new experiment!</div>
+                    <div class="help-text">• Double-tap an experiment to edit!</div>
+					<div class="help-text">• Validate or Falsify a node to iterate! Science is fun!</div>
+                </div>
+            </div>
+<div> <a href="https://gemini.google.com/share/7b2c82913e1e">see Gemini make this tool. </a></div>  
+  <div class="btn-row">
+                <button class="btn btn-primary"
+                    onclick="document.getElementById('help-overlay').style.display='none'">OK, LET'S GO! 🚀</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="modal-overlay" class="modal-overlay">
+        <div class="modal" id="main-modal">
+            <h2 id="modal-title">Edit Node</h2>
+            <div id="arch-fields">
+                <div class="form-group"><label class="form-label">PROJECT NAME</label><input type="text" id="inp-label"
+                        class="form-input"></div>
+                <div class="form-group" id="group-lineage"><label class="form-label" id="lbl-lineage">Required By</label>
+                    <div id="container-lineage"></div>
+                </div>
+                <div class="form-group"><label class="form-label" id="lbl-catalyst">CATALYST</label>
+                    <textarea id="inp-catalyst" class="form-input" style="height:60px;"></textarea>
+                </div>
+                <div class="form-group"><label class="form-label" id="lbl-vector">VECTOR</label>
+                    <textarea id="inp-vector" class="form-input" style="height:60px;"></textarea>
+                </div>
+				                <div class="form-group"
+                    style="display:flex; align-items:center; gap:10px; border:1px solid #333; padding:10px; background:#111;">
+                    <input type="checkbox" id="inp-finished" style="width:20px; height:20px; cursor:pointer;">
+                    <label for="inp-finished" class="form-label" style="margin:0; cursor:pointer; color:#fff;">PROJECT
+                        FINISHED?</label>
+                </div>
+            </div>
+            <div id="commit-section"
+                style="display:none; border-top: 1px dashed #444; margin-top: 10px; padding-top: 10px;">
+                <label style="color: var(--node-commit); font-weight: bold; font-size: 14px;">COMMIT PROTOCOLS</label>
+                <div class="form-group"><label class="form-label" style="color:#fff;">MESSAGE</label><textarea
+                        id="inp-commit-msg" class="form-input" style="height:60px;"></textarea></div>
+                <div class="protocol-grid">
+                    <div class="proto-box">
+                        <div class="proto-header">BUILD</div><textarea id="inp-commit-build" class="form-input"
+                            style="height:60px; font-size:11px;"></textarea>
+                    </div>
+                    <div class="proto-box">
+                        <div class="proto-header">HOWTO</div><textarea id="inp-commit-howto" class="form-input"
+                            style="height:60px; font-size:11px;"></textarea>
+                    </div>
+                </div>
+                <div class="form-group" style="margin-top:10px;"><label class="form-label"
+                        style="color:var(--accent-green);">TEST</label><textarea id="inp-commit-test" class="form-input"
+                        style="height:40px; font-size:11px;"></textarea></div>
+                <div class="form-group" id="grp-inn-link"
+                    style="border:1px dashed var(--accent-purple); padding:10px; margin-top:10px;">
+                    <label class="form-label" style="color:var(--accent-purple);">LINK TO INNOVATION</label>
+                    <select id="sel-innovation-link" class="form-input" style="background:#110011;">
+                        <option value="">(None)</option>
+                    </select>
+                </div>
+            </div>
+            <div class="btn-row">
+                <button class="btn btn-cancel"
+                    onclick="document.getElementById('modal-overlay').style.display='none'">Cancel</button>
+                <button class="btn btn-red"
+                    onclick="NexusSystem.instance.triggerAction('delete'); document.getElementById('modal-overlay').style.display='none';">🗑️
+                    DELETE</button>
+                <button class="btn btn-primary" onclick="NexusSystem.instance.submitModal()">Confirm</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="rollerdeck-overlay" class="modal-overlay" style="z-index:2100;">
+        <div class="modal" id="rollerdeck-modal" style="border-color: var(--accent-purple);">
+            <h2 style="color:var(--accent-purple);">⚗️ INNOVATION LAB</h2>
+            <div class="form-group"><label class="form-label" style="color:#aaa;">OBSERVATION</label><textarea
+                    id="rd-observation" class="form-input" style="height:60px;"></textarea></div>
+            <div class="form-group"><label class="form-label" style="color:#aaa;">EXPIRY DATE</label><input type="date"
+                    id="rd-expiry" class="form-input" style="border-color:var(--accent-red);"></div>
+            <div id="rd-time-display"
+                style="font-family:monospace; color:#0f0; margin-bottom:10px; font-size:12px; background:#110011; padding:5px; border:1px solid #330033; text-align:center;">
+                TIME CONSUMED: 00:00:00</div>
+            <div class="form-group"><label class="form-label" style="color:#aaa;">QUESTION</label><input type="text"
+                    id="rd-question" class="form-input"></div>
+            <div class="form-group"><label class="form-label" style="color:#aaa;">LINK TASK</label>
+                <select id="rd-task" class="form-input" style="background:#110011;">
+                    <option value="">(None)</option>
+                </select>
+            </div>
+            <div class="sci-grid">
+                <div class="sci-box">
+                    <div class="sci-header">HYPOTHESIS</div><textarea id="rd-hypothesis"
+                        class="sci-textarea"></textarea>
+                </div>
+                <div class="sci-box">
+                    <div class="sci-header">NULL HYPOTHESIS</div><textarea id="rd-null" class="sci-textarea"></textarea>
+                </div>
+            </div>
+            <div class="sci-grid" style="margin-top:10px;">
+                <div class="sci-box">
+                    <div class="sci-header">SUCCESS THRESHOLD (Metric &lt; X)</div><textarea id="rd-threshold"
+                        class="sci-textarea"></textarea>
+                </div>
+                <div class="sci-box">
+                    <div class="sci-header">PIVOT LOGIC (Fallback)</div><textarea id="rd-pivot"
+                        class="sci-textarea"></textarea>
+                </div>
+            </div>
+            <div class="sci-grid" style="margin-top:10px;">
+                <div class="sci-box">
+                    <div class="sci-header">TEST / EXECUTION</div><textarea id="rd-test"
+                        class="sci-textarea"></textarea>
+                </div>
+                <div class="sci-box">
+                    <div class="sci-header">RESULTS / TELEMETRY</div><textarea id="rd-results"
+                        class="sci-textarea"></textarea>
+                </div>
+            </div>
+            <div class="btn-row">
+                <button class="btn btn-cancel"
+                    onclick="document.getElementById('rollerdeck-overlay').style.display='none'">Close</button>
+                <button class="btn btn-purple" onclick="NexusSystem.instance.saveInnovationNode()">Save</button>
+                <button class="btn" style="background:#224422; color:#0f0;"
+                    onclick="NexusSystem.instance.iterateInnovation(true)">VALIDATE
+                    (Next)</button>
+                <button class="btn" style="background:#442222; color:#f55;"
+                    onclick="NexusSystem.instance.iterateInnovation(false)">FALSIFY
+                    (Pivot)</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="task-overlay" class="modal-overlay" style="z-index:2200;">
+        <div class="modal" id="task-modal" style="border-color: var(--col-layer4);">
+            <h2 style="color:var(--col-layer4);">🏗️ BLUEPRINT TASK</h2>
+            <div class="form-group"><label class="form-label">TASK NAME</label><input type="text" id="tsk-name"
+                    class="form-input"></div>
+            <div class="form-group">
+                <label class="form-label">ARCHETYPE</label>
+                <select id="tsk-type" class="form-input" style="font-weight:bold;">
+                    <option value="4" style="color:#90caf9">LAYER 4: External (Blue)</option>
+                    <option value="3" style="color:#a5d6a7">LAYER 3: Bridge/Adapter (Green)</option>
+                    <option value="2" style="color:#ef9a9a">LAYER 2: Application (Red)</option>
+                    <option value="1" style="color:#fff59d">LAYER 1: Core Domain (Yellow)</option>
+                </select>
+            </div>
+            <div class="form-group"><label class="form-label">DEPENDS ON (Target)</label><select id="tsk-dep"
+                    class="form-input" multiple style="height:80px;"></select></div>
+            <div class="btn-row">
+                <button class="btn btn-cancel"
+                    onclick="document.getElementById('task-overlay').style.display='none'">CANCEL</button>
+                <button class="btn" style="background:var(--col-layer4); color:#000;"
+                    onclick="NexusSystem.instance.submitTaskModal()">CONFIRM</button>
+                <button class="btn btn-red" onclick="NexusSystem.instance.deleteTaskNode();"
+                    style="flex:0;">🗑️</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        /**
+         * TEMPORAL NEXUS v14 (OOP Edition)
+         * Solves Recursion & Stack Overflow via Object Graph Architecture
+         */
+
+        // --- 1. CORE DOMAIN OBJECTS ---
+
+        class NexusNode {
+            constructor(id, label, data = {}) {
+                this.id = id;
+                this.label = label || "Untitled";
+                this.data = data;
+                this.created = Date.now();
+            }
+
+            updateDock() {
+                // Base implementation
+                document.getElementById('dock-title').innerText = this.label;
+                const sub = document.getElementById('dock-sub');
+                if (sub) sub.innerText = "ID: " + this.id;
+            }
+        }
+
+        class ArchNode extends NexusNode {
+            constructor(id, label, data = {}) {
+                super(id, label, data);
+                // Graph Structure
+                this.description = data.description || "";
+                this.dependents = []; // Who employs me? (Parents in graph)
+                this.dependencies = []; // Who do I employ? (Children in graph)
+
+                // Flags
+                this.isFinished = data.status === 'complete';
+
+                // Sub-Systems (Owned Roots)
+                this.histRoot = null; // Single HistNode
+                this.innRoots = [];   // Array of InnNode (Forest)
+                this.taskGraph = [];  // Array of TaskNode (Internal Graph)
+            }
+
+            // Helpers
+            addDependency(childNode) {
+                if (!this.dependencies.includes(childNode)) this.dependencies.push(childNode);
+                if (!childNode.dependents.includes(this)) childNode.dependents.push(this);
+            }
+
+            updateDock() {
+                document.getElementById('dock-title').innerText = "PROJECT: " + this.label;
+                const sub = document.getElementById('dock-sub');
+                if (!sub) return;
+
+                const status = this.isFinished ? "COMPLETE" : "ACTIVE";
+                const parents = this.dependents.map(d => d.label).join(", ");
+                sub.innerText = `STATUS: ${status} | PARENTS: ${parents || 'None'}`;
+                sub.style.color = this.isFinished ? '#ffd700' : '#4ecdc4';
+            }
+        }
+
+        class HistNode extends NexusNode {
+            constructor(id, label, data = {}) {
+                super(id, label, data);
+                this.commits = []; // Chronological list of commits
+            }
+
+            addCommit(commit) {
+                this.commits.push(commit);
+            }
+
+            updateDock() {
+                document.getElementById('dock-title').innerText = "HISTORY: " + this.label;
+                const sub = document.getElementById('dock-sub');
+                if (sub) {
+                    sub.innerText = `COMMITS: ${this.commits.length}`;
+                    sub.style.color = '#ccc';
+                }
+            }
+        }
+
+        class CommitNode extends NexusNode {
+            constructor(id, title, changes = {}) {
+                super(id, title, changes);
+                this.timestamp = Date.now();
+            }
+        }
+
+        class InnNode extends NexusNode {
+            constructor(id, label, data = {}) {
+                super(id, label, data);
+                // Binary Tree Logic
+                this.next = null;   // Validated -> Next Step
+                this.pivot = null;  // Falsified -> Pivot / Alt Hypothesis
+
+                // Fields
+                // Fields
+                this.expiryDate = data.expiryDate || null;
+                this.hypothesis = data.hypothesis || "";
+                this.question = data.question || "";
+                this.observation = data.observation || "";
+                this.taskId = data.taskId || null;
+                this.timeConsumed = data.timeConsumed || 0;
+                this.archId = data.archId || null;
+            }
+
+            checkExpiry() {
+                if (!this.expiryDate) return 'fresh';
+                const diff = new Date(this.expiryDate).getTime() - Date.now();
+                if (diff < 0) return 'critical';
+                if (diff < 86400000 * 3) return 'warn';
+                return 'fresh';
+            }
+
+            updateDock() {
+                document.getElementById('dock-title').innerText = "EXP: " + this.label;
+                const sub = document.getElementById('dock-sub');
+                if (sub) {
+                    const st = this.checkExpiry().toUpperCase();
+                    sub.innerText = `STATUS: ${st} | EXPIRY: ${this.expiryDate || 'None'}`;
+                    sub.style.color = st === 'CRITICAL' ? '#ff5555' : '#d500f9';
+                }
+            }
+        }
+
+        class TaskNode extends NexusNode {
+            constructor(id, label, layer = 4) {
+                super(id, label);
+                this.layer = parseInt(layer); // 1, 2, 3, 4
+                this.edges = []; // Adjacency list of TaskNode IDs
+                // Note: We store IDs for edges here because TaskNodes might reference Ghost Nodes (which are transient)
+            }
+
+            updateDock() {
+                const COLORS = { 1: '#fff59d', 2: '#ef9a9a', 3: '#a5d6a7', 4: '#90caf9' };
+                const t = document.getElementById('dock-title');
+                t.innerText = "TASK: " + this.label;
+                t.style.color = COLORS[this.layer] || '#fff';
+
+                const sub = document.getElementById('dock-sub');
+                if (sub) {
+                    sub.innerText = `LAYER: ${this.layer} | EDGES: ${this.edges.length}`;
+                    sub.style.color = COLORS[this.layer];
+                }
+            }
+        }
+
+        // --- 2. SYSTEM MANAGER (SINGLETON) ---
+
+        class NexusSystem {
+            constructor() {
+                if (NexusSystem.instance) return NexusSystem.instance;
+                NexusSystem.instance = this;
+
+                // Source of Truth
+                this.nodes = new Map(); // All ArchNodes by ID
+                this.registry = new Map(); // GLOBAL REGISTRY (O(1) lookup for ALL nodes)
+                this.root = null;
+
+                // Visual State
+                this.archData = { nodes: new vis.DataSet([]), edges: new vis.DataSet([]) };
+                this.histData = { nodes: new vis.DataSet([]), edges: new vis.DataSet([]) };
+                this.engData = { nodes: new vis.DataSet([]), edges: new vis.DataSet([]) };
+                this.innData = { nodes: new vis.DataSet([]), edges: new vis.DataSet([]) };
+                this.taskData = { nodes: new vis.DataSet([]), edges: new vis.DataSet([]) }; // Active View Only
+
+                this.networks = {};
+                this.currentSelection = null;
+                this.activeTab = 'engine';
+                this.activeTab = 'engine';
+                this.activeHistorianMode = 'history'; // 'history' | 'innovation'
+                this.activeTimerNode = null;
+                this.timerInterval = null;
+                this.currentInnId = null; // Track selected InnNode explicitly
+            }
+
+            register(node) {
+                if (!node || !node.id) return;
+                this.registry.set(node.id, node);
+            }
+
+            init() {
+                this.initNetworks();
+                this.loadState();
+
+                // EVENT LISTENERS (Manual decoupling to avoid recursion)
+                // We rely on "triggerAction" -> "updateModel" -> "render" loop.
+                // Vis network events are only for SELECTION/UI, not Data Model updates.
+            }
+
+            initNetworks() {
+                const options = {
+                    physics: { enabled: false },
+                    interaction: { hover: true, dragView: true, zoomView: true, dragNodes: true, multiselect: false },
+                    manipulation: { enabled: false }
+                };
+
+                // ARC
+                this.networks.arch = new vis.Network(
+                    document.getElementById('viz-architect'),
+                    this.archData,
+                    {
+                        layout: { hierarchical: { direction: 'UD', sortMethod: 'directed', levelSeparation: 150, nodeSpacing: 200 } },
+                        ...options,
+                        nodes: { shape: 'box', font: { face: 'Courier New', color: '#fff' }, borderWidth: 2, margin: 10, color: { border: '#4ecdc4', background: '#222', highlight: { border: '#fff', background: '#444' } } },
+                        edges: { arrows: 'to', color: '#555' }
+                    }
+                );
+
+                this.networks.arch.on("click", (p) => {
+                    if (p.nodes.length) {
+                        this.selectNode(p.nodes[0]);
+                        // User Req: Focus events
+                        if (this.activeHistorianMode === 'history') {
+                            this.networks.hist.fit({ nodes: [p.nodes[0]], animation: true });
+                        } else {
+                            this.networks.hist.fit({ animation: true });
+                        }
+                        this.networks.task.fit({ animation: true });
+                    } else {
+                        this.deselectAll();
+                    }
+                });
+                this.networks.arch.on("doubleClick", (p) => { if (!p.nodes.length) this.triggerAction('create_root', p.pointer.canvas); else this.triggerAction('edit'); });
+
+                // HIST
+                this.networks.hist = new vis.Network(
+                    document.getElementById('viz-historian'),
+                    this.histData,
+                    { ...options, nodes: { shape: 'dot', size: 10, font: { face: 'Courier New', color: '#ccc', size: 12, align: 'left' } }, edges: { color: { color: '#444', opacity: 0.5 } } }
+                );
+                this.networks.hist.on("click", (p) => {
+                    if (!p.nodes.length) return;
+                    if (this.activeHistorianMode === 'history') {
+                        this.handleHistClick(p.nodes[0]);
+                    } else {
+                        // Innovation Mode
+                        this.currentInnId = p.nodes[0];
+                        document.getElementById('dock-title').innerText = "EXP: " + (this.registry.get(p.nodes[0])?.label || "Unknown");
+                    }
+                });
+                this.networks.hist.on("doubleClick", (p) => {
+                    if (this.activeHistorianMode === 'history') {
+                        if (p.nodes.length) {
+                            const id = p.nodes[0];
+                            if (this.nodes.has(id)) {
+                                this.selectNode(id);
+                                this.openCommitModal();
+                            }
+                        }
+                    } else {
+                        // Innovation Mode
+                        if (p.nodes.length) this.openRollerDeck(p.nodes[0]);
+                        else this.triggerAction('create_inn_root');
+                    }
+                });
+
+                // ENG
+                this.networks.eng = new vis.Network(
+                    document.getElementById('viz-engine'),
+                    this.engData,
+                    { ...options, nodes: { shape: 'box', font: { face: 'Courier New', color: '#fff' } }, edges: { arrows: 'to', color: '#444', smooth: { type: 'curvedCW', roundness: 0.2 } } }
+                );
+                this.networks.eng.on("click", (p) => {
+                    if (p.nodes.length) {
+                        const archId = p.nodes[0];
+                        if (this.nodes.has(archId)) {
+                            // Focus Architect View
+                            this.selectNode(archId);
+                            this.networks.arch.selectNodes([archId]);
+                            this.networks.arch.focus(archId, { animation: true });
+                        }
+                    }
+                });
+
+
+
+                // TASK
+                // TASK config: relaxed layout
+                this.networks.task = new vis.Network(
+                    document.getElementById('viz-tasks'),
+                    this.taskData,
+                    {
+                        layout: {
+                            hierarchical: {
+                                enabled: false // User requested removal of static constraints
+                            }
+                        },
+                        physics: {
+                            enabled: true,
+                            solver: 'forceAtlas2Based',
+                            hierarchicalRepulsion: { nodeDistance: 150 }
+                        },
+                        ...options,
+                        nodes: { shape: 'box', font: { face: 'Courier New', color: '#000' }, color: { highlight: { border: '#000', background: '#fff' } } },
+                        edges: { arrows: 'to' }
+                    }
+                );
+                this.networks.task.on("click", (p) => {
+                    // Click highlights (handled by vis), maybe update dock?
+                });
+                this.networks.task.on("doubleClick", (p) => {
+                    if (p.nodes.length && !p.nodes[0].includes("::")) this.openTaskModal(p.nodes[0]);
+                    else if (!p.nodes.length) this.triggerAction('create_task_node', p.pointer.canvas);
+                });
+            }
+
+            // --- DATA MIGRATION & PERSISTENCE ---
+
+            loadState() {
+                const rawV12 = localStorage.getItem('temporalNexusV12');
+                const rawOOP = localStorage.getItem('temporalNexusOOP_v1');
+
+                if (rawOOP) {
+                    this.deserialize(rawOOP);
+                } else if (rawV12) {
+                    // console.warn("Migrating Legacy Data to OOP...");
+                    //this.migrateLegacyData(JSON.parse(rawV12));
+                } else {
+                    // GENESIS
+                    this.createNode('n_genesis', "The Great Goal", {});
+                }
+                this.render();
+            }
+
+            saveState() {
+                const serialized = this.serialize();
+                localStorage.setItem('temporalNexusOOP_v1', serialized);
+            }
+
+            migrateLegacyData(oldData) {
+                this.registry.clear();
+                this.nodes.clear();
+                // Nodes
+                if (!oldData.archNodes) return;
+
+                // 1. Create ArchNodes
+                oldData.archNodes.forEach(n => {
+                    const an = new ArchNode(n.id, n.label, n.data || {});
+                    this.nodes.set(n.id, an);
+                    this.register(an);
+                    if (n.id === 'n_genesis') this.root = an;
+                });
+
+                // 2. Link Edges
+                oldData.archEdges.forEach(e => {
+                    const src = this.nodes.get(e.from);
+                    const dst = this.nodes.get(e.to);
+                    if (src && dst) src.addDependency(dst);
+                });
+
+                // 3. Migrate History
+                this.nodes.forEach(an => {
+                    an.histRoot = new HistNode(an.id, an.label);
+                    this.register(an.histRoot);
+
+                    if (oldData.histNodes) {
+                        const commits = oldData.histNodes.filter(h => h.group === 'commit' && h.id && h.id.startsWith(an.id + '_c_'));
+                        commits.forEach(c => {
+                            const cn = new CommitNode(c.id, c.title, c.data);
+                            an.histRoot.addCommit(cn);
+                            this.register(cn);
+                        });
+                    }
+                });
+
+                // 4. Migrate Innovation
+                if (oldData.innovationData) {
+                    Object.keys(oldData.innovationData).forEach(archId => {
+                        const an = this.nodes.get(archId);
+                        if (!an) return;
+
+                        const iData = oldData.innovationData[archId];
+                        if (!iData.nodes) return;
+
+                        const tempMap = new Map();
+                        iData.nodes.forEach(n => {
+                            const inn = new InnNode(n.id, n.label, n.data);
+                            an.innRoots.push(inn);
+                            tempMap.set(n.id, inn);
+                            this.register(inn);
+                        });
+
+                        iData.edges.forEach(e => {
+                            const from = tempMap.get(e.from);
+                            const to = tempMap.get(e.to);
+                            if (from && to) {
+                                if (e.color && (e.color === '#ff4444' || e.color.color === '#ff4444')) {
+                                    from.pivot = to;
+                                } else {
+                                    from.next = to;
+                                }
+                                const idx = an.innRoots.indexOf(to);
+                                if (idx > -1) an.innRoots.splice(idx, 1);
+                            }
+                        });
+                    });
+                }
+
+                // 5. Migrate Tasks
+                if (oldData.taskData) {
+                    Object.keys(oldData.taskData).forEach(archId => {
+                        const an = this.nodes.get(archId);
+                        if (!an) return;
+                        const tData = oldData.taskData[archId];
+                        if (!tData.nodes) return;
+
+                        const tempTaskMap = new Map();
+
+                        tData.nodes.forEach(tn => {
+                            if (tn.id.includes("::")) return;
+                            const newTask = new TaskNode(tn.id, tn.label, tn.layer);
+                            an.taskGraph.push(newTask);
+                            this.register(newTask);
+                            tempTaskMap.set(tn.id, newTask);
+                        });
+
+                        if (tData.edges) {
+                            tData.edges.forEach(te => {
+                                const src = tempTaskMap.get(te.from);
+                                if (src && !te.to.includes("::")) {
+                                    src.edges.push(te.to);
+                                }
+                            });
+                        }
+                    });
+                }
+
+                this.saveState();
+            }
+
+            serialize() {
+                // Circular structure strategy: ID references
+                const data = { nodes: [] };
+                this.nodes.forEach(n => {
+                    data.nodes.push({
+                        id: n.id,
+                        label: n.label,
+                        data: n.data,
+                        status: n.isFinished ? 'complete' : 'active',
+                        // Edges (IDs)
+                        deps: n.dependencies.map(d => d.id),
+
+                        // Sub-Data (Inline)
+                        commits: n.histRoot ? n.histRoot.commits : [],
+
+                        // Inn (Flatten tree to array for storage, rebuild on load)
+                        innovations: this._flattenInn(n.innRoots),
+
+                        // Tasks
+                        tasks: n.taskGraph
+                    });
+                });
+                return JSON.stringify(data);
+            }
+
+            _flattenInn(roots) {
+                // BFS to flatten
+                const flat = [];
+                const visited = new Set();
+                const queue = [...roots];
+                const edges = [];
+
+                while (queue.length) {
+                    const node = queue.shift();
+                    if (visited.has(node.id)) continue;
+                    visited.add(node.id);
+
+                    flat.push({
+                        id: node.id,
+                        label: node.label,
+                        // Data persistence including new fields
+                        data: {
+                            expiryDate: node.expiryDate,
+                            hypothesis: node.hypothesis,
+                            question: node.question,
+                            observation: node.observation,
+                            taskId: node.taskId,
+                            timeConsumed: node.timeConsumed,
+                            archId: node.archId,
+                            ...node.data
+                        }
+                    });
+
+
+                    if (node.next) {
+                        edges.push({ from: node.id, to: node.next.id, type: 'next' });
+                        queue.push(node.next);
+                    }
+                    if (node.pivot) {
+                        edges.push({ from: node.id, to: node.pivot.id, type: 'pivot' });
+                        queue.push(node.pivot);
+                    }
+                }
+                return { nodes: flat, edges: edges };
+            }
+
+            deserialize(json) {
+                this.registry.clear();
+                this.nodes.clear();
+                const data = (typeof json === 'string') ? JSON.parse(json) : json;
+                // 1. Pass: Create Nodes
+                data.nodes.forEach(raw => {
+                    const an = new ArchNode(raw.id, raw.label, raw.data);
+                    an.isFinished = raw.status === 'complete';
+                    this.nodes.set(raw.id, an);
+                    this.register(an);
+                    if (raw.id === 'n_genesis') this.root = an;
+
+                    // Hydrate Commits
+                    an.histRoot = new HistNode(an.id, an.label); // Re-use ID? Or distinct?
+                    // NOTE: v13 logic used project ID for hist node. 
+                    this.register(an.histRoot);
+
+                    raw.commits.forEach(c => {
+                        const cn = new CommitNode(c.id, c.title, c.data || c.changes);
+                        an.histRoot.addCommit(cn);
+                        this.register(cn);
+                    });
+
+                    // Hydrate Innovation
+                    if (raw.innovations) {
+                        const iMap = new Map();
+                        // Nodes
+                        raw.innovations.nodes.forEach(iRaw => {
+                            const inn = new InnNode(iRaw.id, iRaw.label, iRaw.data);
+                            iMap.set(inn.id, inn);
+                            this.register(inn);
+                        });
+                        // Edges
+                        raw.innovations.edges.forEach(edge => {
+                            const src = iMap.get(edge.from);
+                            const dst = iMap.get(edge.to);
+                            if (src && dst) {
+                                if (edge.type === 'pivot') src.pivot = dst;
+                                else src.next = dst;
+                            }
+                        });
+                        const hasParent = new Set(raw.innovations.edges.map(e => e.to));
+                        an.innRoots = Array.from(iMap.values()).filter(n => !hasParent.has(n.id));
+                    }
+
+                    // Hydrate Tasks
+                    if (raw.tasks) {
+                        raw.tasks.forEach(tRaw => {
+                            const t = new TaskNode(tRaw.id, tRaw.label, tRaw.layer);
+                            t.edges = tRaw.edges || [];
+                            an.taskGraph.push(t);
+                            this.register(t);
+                        });
+                    }
+                });
+                // 2. Pass: Link Arch Dependencies
+                data.nodes.forEach(raw => {
+                    const an = this.nodes.get(raw.id);
+                    raw.deps.forEach(did => {
+                        const target = this.nodes.get(did);
+                        if (target) an.addDependency(target);
+                    });
+                });
+            }
+
+            // --- 3. RENDERING ---
+            // The magic that solves the recursion: Single pass rendering from source of truth.
+
+            render() {
+                this.renderArch();
+                this.renderHistorian();
+                this.renderEng();
+                if (this.currentSelection) {
+                    this.renderTasks(this.currentSelection);
+                } else {
+                    this.taskData.nodes.clear(); this.taskData.edges.clear();
+                }
+                this.updateDock();
+            }
+
+            renderHistorian() {
+                if (this.activeHistorianMode === 'innovation') {
+                    if (this.currentSelection) {
+                        this.renderInn(this.currentSelection);
+                        this.networks.hist.setOptions({ layout: { hierarchical: { direction: 'UD', enabled: true } } });
+                        this.networks.hist.setData(this.innData);
+                    } else {
+                        this.innData.nodes.clear(); this.innData.edges.clear();
+                        this.networks.hist.setData(this.innData);
+                    }
+                } else {
+                    // HISTORY MODE
+                    this._renderHistoryInternal();
+                    this.networks.hist.setOptions({ layout: { hierarchical: { enabled: false } } }); // Matrix uses manual x,y
+                    this.networks.hist.setData(this.histData);
+                }
+            }
+
+            renderArch() {
+                const ns = [];
+                const es = [];
+                this.nodes.forEach(n => {
+                    ns.push({ id: n.id, label: n.label, color: n.isFinished ? '#ffd700' : '#4ecdc4' });
+                    n.dependencies.forEach(dep => {
+                        es.push({ from: n.id, to: dep.id });
+                    });
+                });
+                this.archData.nodes.clear();
+                this.archData.edges.clear();
+                this.archData.nodes.add(ns);
+                this.archData.edges.add(es);
+            }
+
+            _renderHistoryInternal() {
+                // Matrix Layout Logic (Copied from v13.6 but adapted)
+                // "Each archNode contains 1 histNode. The histNode is a root for a single-linked list of commitNode"
+                const ns = [];
+                const es = [];
+
+                // Sort Projects
+                const projects = Array.from(this.nodes.values()).sort((a, b) => a.id.localeCompare(b.id)); // Genesis first?
+
+                let xBase = 0;
+                const spacingX = 200;
+
+                projects.forEach((p, idx) => {
+                    const px = idx * spacingX;
+                    // Project Node (The Hist Root)
+                    ns.push({ id: p.id, label: p.label, x: px, y: 0, group: 'project' });
+
+                    // Commits (Vertical Drop)
+                    if (p.histRoot) {
+                        let cy = 100;
+                        p.histRoot.commits.forEach((c, cIdx) => {
+                            ns.push({ id: c.id, label: '', title: c.label || c.title, x: px, y: cy, shape: 'dot', size: 5, color: '#4ecdc4' });
+
+                            // Edge from prev
+                            if (cIdx === 0) es.push({ from: p.id, to: c.id, dashes: true });
+                            else es.push({ from: p.histRoot.commits[cIdx - 1].id, to: c.id, dashes: true });
+
+                            cy += 60;
+                        });
+                    }
+                });
+
+                // Diffing to avoid flicker, or just clear/add? Vis supports update.
+                this.histData.nodes.clear(); this.histData.nodes.add(ns);
+                this.histData.edges.clear(); this.histData.edges.add(es);
+                // Note: Clearing is safer to remove deleted nodes than 'update' for now.
+            }
+
+       
+            renderEng() {
+                const ns = [];
+                const es = [];
+
+                // Configure Layout (Race Track: Left to Right)
+                // We utilize Vis.js hierarchical layout to enforce the flow
+                this.networks.eng.setOptions({
+                    layout: {
+                        hierarchical: {
+                            enabled: true,
+                            direction: 'LR',
+                            sortMethod: 'directed',
+                            levelSeparation: 250,
+                            nodeSpacing: 150
+                        }
+                    },
+                    physics: { enabled: false }
+                });
+
+                this.nodes.forEach(n => {
+                    // Status Logic
+                    let color = '#00ff41'; // Default Green (Ready)
+                    if (n.isFinished) {
+                        color = '#4ecdc4'; // Blue (Finished)
+                    } else {
+                        // Check if blocked
+                        const blocked = n.dependencies.some(d => !d.isFinished);
+                        if (blocked) color = '#ff4444'; // Red (Blocked)
+                    }
+
+                    ns.push({
+                        id: n.id,
+                        label: n.label,
+                        color: {
+                            background: '#222',
+                            border: color,
+                            highlight: { border: color, background: '#444' }
+                        },
+                        borderWidth: 2
+                    });
+
+                    // Edges (Reversed: Dependency -> Dependent)
+                    // "Architecting a Bridge (Dep) -> Building the Bridge (Dependent)"
+                    // We want Dependency on the LEFT. So Edge goes Dep -> Dependent.
+                    // Wait, standard graph: Parent depends on Child? Or Child depends on Parent?
+                    // In ArchNode: dependents = employers (Parents), dependencies = employees (Children).
+                    // If A depends on B. B is a dependency. B must be first.
+                    // So Edge: B -> A.
+                    // Code: n.dependencies.forEach(dep => ... )
+                    // dep is B. n is A.
+                    // es.push({ from: dep.id, to: n.id });
+                    n.dependencies.forEach(dep => {
+                        es.push({ from: dep.id, to: n.id, arrows: 'to' });
+                    });
+                });
+
+                this.engData.nodes.clear(); this.engData.nodes.add(ns);
+                this.engData.edges.clear(); this.engData.edges.add(es);
+            }
+	   
+            renderInn(archNodeId) {
+                const an = this.nodes.get(archNodeId);
+                const ns = [];
+                const es = [];
+                if (!an) return;
+
+                // Walk the binaries
+                const traverse = (node) => {
+                    // Check Expiry
+                    const spoilage = node.checkExpiry();
+                    const borderColor = spoilage === 'critical' ? '#ff0000' : (spoilage === 'warn' ? '#ff9900' : '#d500f9');
+
+                    ns.push({ id: node.id, label: node.label, color: { border: borderColor } });
+
+                    if (node.next) {
+                        es.push({ from: node.id, to: node.next.id, color: '#00ff41' });
+                        traverse(node.next);
+                    }
+                    if (node.pivot) {
+                        es.push({ from: node.id, to: node.pivot.id, color: '#ff4444', dashes: true });
+                        traverse(node.pivot);
+                    }
+                };
+
+                an.innRoots.forEach(root => traverse(root));
+
+                this.innData.nodes.clear(); this.innData.nodes.add(ns);
+                this.innData.edges.clear(); this.innData.edges.add(es);
+
+            }
+
+            updateDock() {
+                if (!this.currentSelection) {
+                    document.getElementById('dock-title').innerText = "SELECT NODE";
+                    document.getElementById('dock-sub').innerHTML = "";
+                    return;
+                }
+                const node = this.registry.get(this.currentSelection);
+                if (node && typeof node.updateDock === 'function') {
+                    node.updateDock();
+                }
+            }
+
+            renderTasks(archNodeId) {
+                const an = this.nodes.get(archNodeId);
+                if (!an) return;
+
+                const ns = [];
+                const es = [];
+                const addedIds = new Set();
+
+                const LAYER_COLORS = { 1: '#fff59d', 2: '#ef9a9a', 3: '#a5d6a7', 4: '#90caf9' };
+
+                // 1. Local Tasks
+                an.taskGraph.forEach(t => {
+                    ns.push({
+                        id: t.id,
+                        label: t.label,
+                        color: LAYER_COLORS[t.layer],
+                        level: t.layer // For Hierarchical Layout
+                    });
+                    addedIds.add(t.id);
+                });
+
+                // 2. Edges & Violations
+                // "RED if Head.Layer < Tail.Layer" -> Head=From, Tail=To.
+                an.taskGraph.forEach(t => {
+                    t.edges.forEach(targetId => {
+                        // Check if target is ghost?
+                        let targetLayer = 0;
+                        const localTarget = an.taskGraph.find(lt => lt.id === targetId);
+                        if (localTarget) targetLayer = localTarget.layer;
+                        else if (targetId.includes("::")) {
+                            // Ghost logic lookup
+                            // Parse neighborId from ghost ID? taskNodes don't store "ghostness" well in plain ID lists.
+                            // We'll trust the ID map if we can find it.
+                        }
+
+                        const isViolation = targetLayer > 0 && t.layer < targetLayer;
+                        es.push({
+                            from: t.id,
+                            to: targetId,
+                            color: isViolation ? 'red' : '#666',
+                            dashes: isViolation
+                        });
+                    });
+                });
+
+                // 3. Ghost Nodes (Neighbor Tasks)
+                // Dependents (Parents) and Dependencies (Children) of ArchNode
+                const neighbors = [...an.dependents, ...an.dependencies];
+                neighbors.forEach(nan => {
+                    nan.taskGraph.forEach(nt => {
+                        // Only show if it's layer 4 (External) OR if linked?
+                        // User said: "ghost display... neighbour archNodes' tasksNodes graphs"
+                        // I'll show Layer 4 Ghosts by default to keep it clean, 
+                        // or show ALL if needed. Let's start with Layer 4 ("Interfaces").
+                        if (nt.layer === 4) {
+                            const gid = `${nan.id}::${nt.id}`;
+                            ns.push({
+                                id: gid,
+                                label: `[${nan.label}]\n${nt.label}`,
+                                color: { background: 'rgba(144, 202, 249, 0.2)', border: '#90caf9' },
+                                shapeProperties: { borderDashes: [5, 5] },
+                                level: 4
+                            });
+                        }
+                    });
+                });
+
+                this.taskData.nodes.clear(); this.taskData.nodes.add(ns);
+                this.taskData.edges.clear(); this.taskData.edges.add(es);
+                this.networks.task.fit();
+            }
+
+            // --- 4. INTERACTION ---
+
+            selectNode(id) {
+                this.currentSelection = id;
+                this.render(); // Re-render Sub-views (Inn/Task)
+            }
+
+            deselectAll() {
+                this.currentSelection = null;
+                this.render();
+            }
+
+            createNode(id, label, data) {
+                const n = new ArchNode(id, label, data);
+                n.histRoot = new HistNode(id, label); // Init History
+                this.register(n.histRoot);
+
+                this.nodes.set(id, n);
+                this.register(n);
+
+                if (!this.root) this.root = n;
+                this.saveState();
+                this.render();
+            }
+
+            triggerAction(action, point) {
+                this.lastClickPoint = point; // Store for creation
+
+                if (action === 'create_root') {
+                    const id = 'n_' + Date.now();
+                    this.createNode(id, "New Project", {});
+                }
+                else if (action === 'delete') {
+                    if (this.currentSelection && confirm("Delete Project and all History?")) {
+                        this.nodes.delete(this.currentSelection);
+                        // Clean edges
+                        this.nodes.forEach(n => {
+                            n.dependencies = n.dependencies.filter(d => d.id !== this.currentSelection);
+                            n.dependents = n.dependents.filter(d => d.id !== this.currentSelection);
+                        });
+                        this.deselectAll();
+                        this.saveState();
+                        this.render();
+                    }
+                }
+                else if (action === 'edit' && this.currentSelection) {
+                    this.openEditModal();
+                }
+                else if (action === 'commit' && this.currentSelection) {
+                    this.openCommitModal();
+                }
+                else if (action === 'add_derivative' && this.currentSelection) {
+                    const id = 'n_' + Date.now();
+                    this.createNode(id, "New Child", {});
+                    const parent = this.nodes.get(this.currentSelection);
+                    const child = this.nodes.get(id);
+                    parent.addDependency(child);
+                    this.saveState();
+                    this.render();
+                    setTimeout(() => this.selectNode(id), 100);
+                }
+                else if (action === 'create_inn_root' && this.currentSelection) {
+                    this.openRollerDeck(null); // Create new
+                }
+                else if (action === 'create_task_node' && this.currentSelection) {
+                    this.openTaskModal(null);
+                }
+            }
+
+            handleHistClick(id) {
+                // If ID matches an ArchNode (Project Root in Hist View)
+                if (this.nodes.has(id)) {
+                    this.selectNode(id);
+                    // Focus camera on main architect view?
+                    this.networks.arch.fit({ nodes: [id], animation: true });
+                } else if (id.includes('_c_')) {
+                    // It's a commit
+                    const parts = id.split('_c_');
+                    const archId = parts[0];
+                    this.selectNode(archId);
+                    this.networks.arch.fit({ nodes: [archId], animation: true });
+                }
+            }
+
+            // --- ARCH MODAL ---
+            openEditModal() {
+                const n = this.nodes.get(this.currentSelection);
+                if (!n) return;
+
+                document.getElementById('modal-overlay').style.display = 'flex';
+                document.getElementById('modal-title').innerText = "Edit Project";
+                document.getElementById('arch-fields').style.display = 'block';
+                document.getElementById('commit-section').style.display = 'none';
+
+                document.getElementById('inp-label').value = n.label;
+
+                // Render Questions (Simplified for brevity)
+                document.getElementById('inp-catalyst').value = n.data.catalyst || "";
+                document.getElementById('inp-vector').value = n.data.vector || "";
+
+                document.getElementById('inp-finished').checked = n.isFinished || false;
+				
+                // Lineage (Parent selection)
+                const lContainer = document.getElementById('container-lineage'); lContainer.innerHTML = '';
+                const select = document.createElement('select'); select.multiple = true; select.className = 'form-input'; select.style.height = '80px';
+
+                this.nodes.forEach(other => {
+                    if (other.id === n.id) return;
+                    const opt = document.createElement('option');
+                    opt.value = other.id;
+                    opt.text = other.label;
+                    if (n.dependents.includes(other)) opt.selected = true; // dependents = my parents
+                    select.appendChild(opt);
+                });
+                lContainer.appendChild(select);
+
+                this.currentModalAction = 'edit_arch';
+            }
+
+            openCommitModal() {
+                if (!this.currentSelection) return;
+                document.getElementById('modal-overlay').style.display = 'flex';
+                document.getElementById('modal-title').innerText = "Log Commit";
+                document.getElementById('arch-fields').style.display = 'none';
+                document.getElementById('commit-section').style.display = 'block';
+
+                document.getElementById('inp-commit-msg').value = "";
+                this.currentModalAction = 'submit_commit';
+            }
+
+            submitModal() {
+                const n = this.nodes.get(this.currentSelection);
+
+                if (this.currentModalAction === 'edit_arch' && n) {
+                    n.label = document.getElementById('inp-label').value;
+                    n.data.catalyst = document.getElementById('inp-catalyst').value;
+                    n.data.vector = document.getElementById('inp-vector').value;
+                    n.isFinished = document.getElementById('inp-finished').checked;
+
+                    // Update Parents
+                    const select = document.getElementById('container-lineage').querySelector('select');
+                    const newParentIds = Array.from(select.selectedOptions).map(o => o.value);
+
+                    // 1. Remove old parents linkage
+                    n.dependents.forEach(p => {
+                        p.dependencies = p.dependencies.filter(d => d !== n);
+                    });
+                    n.dependents = [];
+
+                    // 2. Add new
+                    newParentIds.forEach(pid => {
+                        const p = this.nodes.get(pid);
+                        if (p) {
+                            p.addDependency(n); // This handles bidirectional array update
+                        }
+                    });
+                }
+                else if (this.currentModalAction === 'submit_commit' && n) {
+                    const msg = document.getElementById('inp-commit-msg').value;
+                    const c = new CommitNode(n.id + '_c_' + Date.now(), msg, {});
+                    n.histRoot.addCommit(c);
+                    this.register(c);
+                }
+
+                document.getElementById('modal-overlay').style.display = 'none';
+                this.saveState();
+                this.render();
+            }
+
+            // --- INNOVATION MODAL ---
+            openRollerDeck(nodeId) {
+                if (!this.currentSelection) return;
+                const an = this.nodes.get(this.currentSelection);
+
+                this.currentInnId = nodeId;
+                document.getElementById('rollerdeck-overlay').style.display = 'flex';
+
+                // Find Node logic
+                let inn = null;
+                if (nodeId) {
+                    if (typeof nodeId === 'object') nodeId = nodeId.id; // handle vis object
+                    // Flatten lookup
+                    const all = this._flattenInn(an.innRoots).nodes;
+                    const found = all.find(x => x.id === nodeId);
+                    // Wait, we need the actual OBJECT reference from the tree, not the flat copy.
+                    // Recursive find
+                    const find = (roots) => {
+                        for (let r of roots) {
+                            if (r.id === nodeId) return r;
+                            if (r.next) { const f = find([r.next]); if (f) return f; }
+                            if (r.pivot) { const f = find([r.pivot]); if (f) return f; }
+                        }
+                        return null;
+                    };
+                    inn = find(an.innRoots);
+                }
+
+                // Populate Task Select
+                const tSelect = document.getElementById('rd-task');
+                if (tSelect) {
+                    tSelect.innerHTML = '<option value="">(None)</option>';
+                    if (an && an.taskGraph) {
+                        an.taskGraph.forEach(t => {
+                            const opt = document.createElement('option');
+                            opt.value = t.id;
+                            opt.text = `[L${t.layer}] ${t.label}`;
+                            tSelect.appendChild(opt);
+                        });
+                    }
+                }
+
+                // Fill Fields
+                if (inn) {
+                    document.getElementById('rd-hypothesis').value = inn.hypothesis || "";
+                    document.getElementById('rd-expiry').value = inn.expiryDate || "";
+                    if (tSelect) tSelect.value = inn.taskId || "";
+
+                    const timeDiv = document.getElementById('rd-time-display');
+                    if (timeDiv) {
+                        const fmt = (ms) => {
+                            const s = Math.floor(ms / 1000);
+                            const h = Math.floor(s / 3600).toString().padStart(2, '0');
+                            const m = Math.floor((s % 3600) / 60).toString().padStart(2, '0');
+                            const sec = (s % 60).toString().padStart(2, '0');
+                            return `${h}:${m}:${sec}`;
+                        }
+                        timeDiv.innerText = "TIME CONSUMED: " + fmt(inn.timeConsumed || 0);
+                    }
+                } else {
+                    // Clear
+                    document.getElementById('rd-hypothesis').value = "";
+                    document.getElementById('rd-expiry').value = "";
+                    if (tSelect) tSelect.value = "";
+                }
+            }
+
+            saveInnovationNode() {
+                const an = this.nodes.get(this.currentSelection);
+                if (!an) return;
+
+                const data = {
+                    hypothesis: document.getElementById('rd-hypothesis').value,
+                    observation: document.getElementById('rd-observation').value,
+                    question: document.getElementById('rd-question').value,
+                    expiryDate: document.getElementById('rd-expiry').value,
+                    taskId: document.getElementById('rd-task') ? document.getElementById('rd-task').value : null,
+                };
+
+                if (this.currentInnId) {
+                    // Update - O(1) via Registry!
+                    const inn = this.registry.get(this.currentInnId);
+                    if (inn) {
+                        inn.hypothesis = data.hypothesis;
+                        inn.observation = data.observation;
+                        inn.question = data.question;
+                        inn.label = (data.question.substring(0, 20) || "Experiment") + "...";
+                        inn.expiryDate = data.expiryDate;
+                        inn.taskId = data.taskId;
+                        // archId is preserved
+                    }
+                } else {
+                    // Create New Root
+                    const id = 'inn_' + Date.now();
+                    const inn = new InnNode(id, (data.question.substring(0, 20) || "Experiment") + "...", data);
+                    inn.observation = data.observation;
+                    inn.question = data.question;
+                    inn.archId = this.currentSelection; // Link to parent
+                    an.innRoots.push(inn);
+                    this.register(inn);
+                    // this.currentInnId = id; // Auto-select?
+                }
+
+                document.getElementById('rollerdeck-overlay').style.display = 'none';
+                this.saveState();
+                this.render();
+            }
+
+            iterateInnovation(isValidated) {
+                // Logic to add child node
+                this.saveInnovationNode(); // Save current first
+
+                const an = this.nodes.get(this.currentSelection);
+                // Need to find the node again... BUT wait, use registry!
+
+                let parent = null;
+                if (this.currentInnId) {
+                    parent = this.registry.get(this.currentInnId);
+                }
+
+                if (parent) {
+                    const id = 'inn_' + Date.now();
+                    const child = new InnNode(id, isValidated ? "Validated: Next" : "Falsified: Pivot", {
+                        archId: parent.archId,
+                        taskId: parent.taskId
+                    });
+                    if (isValidated) parent.next = child;
+                    else parent.pivot = child;
+
+                    this.register(child);
+
+                    // Select the new node immediately for edits?
+                    this.currentInnId = id;
+                    this.openRollerDeck(id);
+
+                    this.saveState();
+                    this.render();
+                }
+            }
+
+            // --- TASK MODAL ---
+            openTaskModal(nodeId) {
+                if (!this.currentSelection) return;
+                const an = this.nodes.get(this.currentSelection);
+                this.currentTaskId = nodeId;
+
+                document.getElementById('task-overlay').style.display = 'flex';
+
+                let t = null;
+                if (nodeId) t = an.taskGraph.find(x => x.id === nodeId);
+
+                document.getElementById('tsk-name').value = t ? t.label : "";
+                document.getElementById('tsk-type').value = t ? t.layer : "4";
+
+                // Deps selector
+                const sel = document.getElementById('tsk-dep'); sel.innerHTML = '';
+                an.taskGraph.forEach(ot => {
+                    if (ot.id === (nodeId || '')) return;
+                    const opt = document.createElement('option');
+                    opt.value = ot.id;
+                    opt.text = `[L${ot.layer}] ${ot.label}`;
+                    if (t && t.edges.includes(ot.id)) opt.selected = true;
+                    sel.appendChild(opt);
+                });
+
+                // Add Ghost Options (Neighbor Interfaces)
+                const neighbors = [...an.dependents, ...an.dependencies];
+                neighbors.forEach(nan => {
+                    nan.taskGraph.forEach(nt => {
+                        // Allow linking to Layer 4 (External) tasks of neighbors
+                        if (nt.layer === 4) {
+                            const opt = document.createElement('option');
+                            // Use composite ID so renderer knows it's a ghost link
+                            opt.value = `${nan.id}::${nt.id}`;
+                            opt.text = `[${nan.label}] ${nt.label}`;
+                            if (t && t.edges.includes(opt.value)) opt.selected = true;
+                            sel.appendChild(opt);
+                        }
+                    });
+                });
+            }
+
+            submitTaskModal() {
+                const an = this.nodes.get(this.currentSelection);
+                const name = document.getElementById('tsk-name').value;
+                const layer = document.getElementById('tsk-type').value;
+                const depSelect = document.getElementById('tsk-dep');
+                const deps = Array.from(depSelect.selectedOptions).map(o => o.value);
+
+                if (this.currentTaskId) {
+                    // Update
+                    const t = an.taskGraph.find(x => x.id === this.currentTaskId);
+                    if (t) {
+                        t.label = name;
+                        t.layer = parseInt(layer);
+                        t.edges = deps;
+                    }
+                } else {
+                    // Create
+                    const t = new TaskNode('t_' + Date.now(), name, layer);
+                    t.edges = deps;
+                    an.taskGraph.push(t);
+                }
+
+                document.getElementById('task-overlay').style.display = 'none';
+                this.saveState();
+                this.render();
+                // Re-select logic if needed
+            }
+
+            deleteTaskNode() {
+                const an = this.nodes.get(this.currentSelection);
+                if (this.currentTaskId && confirm("Delete Task?")) {
+                    an.taskGraph = an.taskGraph.filter(t => t.id !== this.currentTaskId);
+                    // Remove edges to it
+                    an.taskGraph.forEach(t => {
+                        t.edges = t.edges.filter(eid => eid !== this.currentTaskId);
+                    });
+                    document.getElementById('task-overlay').style.display = 'none';
+                    this.saveState();
+                    this.render();
+                }
+            }
+
+            // Help
+            switchTab(tab) {
+                this.activeTab = tab;
+                document.getElementById('tab-eng').classList.toggle('active', tab === 'engine');
+                // document.getElementById('tab-inn').classList.toggle('active', tab === 'innovation'); // Removed
+                document.getElementById('tab-tsk').classList.toggle('active', tab === 'tasks');
+
+                document.getElementById('viz-engine').style.visibility = tab === 'engine' ? 'visible' : 'hidden';
+                document.getElementById('viz-innovation').style.visibility = 'hidden'; // Deprecated
+                document.getElementById('viz-tasks').style.visibility = tab === 'tasks' ? 'visible' : 'hidden';
+            }
+
+            switchHistorianTab(mode) {
+                this.activeHistorianMode = mode;
+                // Visual feedback for buttons could be added here
+                this.render(); // Will trigger redrawing of historian panel
+            }
+
+            handleSearch(e) {
+                if (e.key === 'Enter') {
+                    const term = document.getElementById('search-input').value.toLowerCase();
+                    const found = Array.from(this.nodes.values()).find(n => n.label.toLowerCase().includes(term));
+                    if (found) {
+                        this.selectNode(found.id);
+                        this.networks.arch.selectNodes([found.id]);
+                        this.networks.arch.focus(found.id, { animation: true });
+                    }
+                }
+            }
+
+            emergencyWipe() {
+                if (confirm("deleteDATA?")) {
+
+                    localStorage.removeItem('temporalNexusOOP_v1');
+                    location.reload();
+                }
+            }
+
+            loadJSON(input) {
+                const file = input.files[0];
+                if (!file) return;
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    try {
+                        const data = JSON.parse(e.target.result);
+
+                        this.deserialize(data);
+                        console.log("Got past deserialize");
+                        this.render();
+                        alert("Data Loaded Successfully");
+                    } catch (err) {
+                        alert("Error loading JSON: " + err.message);
+                    }
+                };
+                reader.readAsText(file);
+            }
+
+            downloadTextReport() {
+                let report = "TEMPORAL NEXUS REPORT\n=====================\n\n";
+                this.nodes.forEach(node => {
+                    if (node instanceof ArchNode) {
+                        report += `[PROJECT] ${node.label} (ID: ${node.id})\n`;
+                        report += `  Status: ${node.status} | Time: ${node.timeConsumed || 0}ms\n`;
+                        report += `  Catalyst: ${node.data.catalyst || 'N/A'}\n  Vector: ${node.data.vector || 'N/A'}\n`;
+                        report += `  -- Experiments --\n`;
+                        node.innRoots.forEach(r => report += this._reportInn(r, "    "));
+                        report += `  -- Tasks --\n`;
+                        node.taskGraph.forEach(t => report += `    [${t.layer}] ${t.label} (${t.status}) - ${t.timeConsumed || 0}ms\n`);
+                        report += "\n";
+                    }
+                });
+
+                const blob = new Blob([report], { type: "text/plain" });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement("a");
+                a.href = url;
+                a.download = "nexus_report_" + Date.now() + ".txt";
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+            }
+
+            _reportInn(node, indent) {
+                let s = `${indent}- ${node.label} (${node.status}) Time: ${node.timeConsumed || 0}ms\n`;
+                s += `${indent}  Question: ${node.question || 'N/A'}\n`;
+                s += `${indent}  Observation: ${node.observation || 'N/A'}\n`;
+                s += `${indent}  Hypothesis: ${node.hypothesis || 'N/A'}\n`;
+                if (node.next) s += this._reportInn(node.next, indent);
+                if (node.pivot) s += this._reportInn(node.pivot, indent + "  ");
+                return s;
+            }
+
+            openHelp() {
+                document.getElementById('help-overlay').style.display = 'flex';
+            }
+
+            downloadJSON() {
+                const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(this.serialize());
+                const downloadAnchorNode = document.createElement('a');
+                downloadAnchorNode.setAttribute("href", dataStr);
+                downloadAnchorNode.setAttribute("download", "temporal_nexus_" + Date.now() + ".json");
+                document.body.appendChild(downloadAnchorNode);
+                downloadAnchorNode.click();
+                downloadAnchorNode.remove();
+            }
+
+            toggleTimer() {
+                if (this.timerInterval) {
+                    clearInterval(this.timerInterval);
+                    this.timerInterval = null;
+                    this.activeTimerNode = null;
+                    document.getElementById('dock-timer-display').style.color = '#0f0';
+                    document.getElementById('dock-timer-display').innerText = "PAUSED";
+                } else {
+                    if (this.currentInnId && this.registry.has(this.currentInnId) && this.registry.get(this.currentInnId) instanceof InnNode) {
+                        this.activeTimerNode = this.currentInnId;
+                        this.timerInterval = setInterval(() => this.tickTimer(), 1000);
+                        document.getElementById('dock-timer-display').style.color = '#f00';
+                        this.tickTimer(); // Immediate update
+                    } else {
+                        alert("Select an Experiment (Innovation Node) first!");
+                    }
+                }
+            }
+
+            tickTimer() {
+                const inn = this.registry.get(this.activeTimerNode);
+                if (!inn) { this.toggleTimer(); return; }
+
+                inn.timeConsumed = (inn.timeConsumed || 0) + 1000;
+
+                // Aggregation
+                if (inn.taskId) {
+                    const t = this.registry.get(inn.taskId);
+                    if (t) t.timeConsumed = (t.timeConsumed || 0) + 1000;
+                }
+
+                if (inn.archId) {
+                    const an = this.registry.get(inn.archId);
+                    if (an) an.timeConsumed = (an.timeConsumed || 0) + 1000;
+                }
+
+                // Update Display
+                const fmt = (ms) => {
+                    const s = Math.floor(ms / 1000);
+                    const h = Math.floor(s / 3600).toString().padStart(2, '0');
+                    const m = Math.floor((s % 3600) / 60).toString().padStart(2, '0');
+                    const sec = (s % 60).toString().padStart(2, '0');
+                    return `${h}:${m}:${sec}`;
+                }
+                document.getElementById('dock-timer-display').innerText = `${fmt(inn.timeConsumed)} | ${inn.label}`;
+            }
+        }
+
+        // --- BOOT ---
+        document.addEventListener('DOMContentLoaded', () => {
+            new NexusSystem().init();
+        });
+
+    </script>
+</body>
+
+</html>
