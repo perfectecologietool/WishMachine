@@ -82,7 +82,7 @@ helps with the process of collating and summarizing text.
 //25jun25
 export function calculateAndStoreFourRowTokens(fourRowReference, completedTurnIndex, finalChunkData) {
 	const fourRowInstance = d4(fourRowReference);
-	console.log(`XX98 inside calculateAnd4rowTokens ${JSON.stringify(finalChunkData)}`);
+	// console.log(`XX98 inside calculateAnd4rowTokens ${JSON.stringify(finalChunkData)}`);
 	if (!fourRowInstance || completedTurnIndex < 0 || !finalChunkData) {
 		console.error("calculateAndStoreTokens invalid arguments."); return;
 	}
@@ -94,13 +94,13 @@ export function calculateAndStoreFourRowTokens(fourRowReference, completedTurnIn
 	}
 	const completedKnot = k1(fourRowInstance.sequence[completedTurnIndex]);
 	const completedTurnCell = completedKnot ? d3(completedKnot.TC) : null;
-	if (!(completedTurnCell instanceof Three_Cell)) { console.log(`calculateandstore XX92  `); return; }
+	if (!(completedTurnCell instanceof Three_Cell)) { /* console.log(`calculateandstore XX92  `); */ return; }
 
 	const promptMessage = d2(completedTurnCell.prompt);
 	const responseMessage = d2(completedTurnCell.response);
 	if (!(promptMessage instanceof Two_Layer) || !(responseMessage instanceof Two_Layer)) {
-		console.log(`calculateandstore XX93  `);
-		console.log(`calculateandstore XX93   `); return;
+		// console.log(`calculateandstore XX93  `);
+		// console.log(`calculateandstore XX93   `); return;
 	}
 
 
@@ -154,7 +154,7 @@ export function calculateAndStoreFourRowTokens(fourRowReference, completedTurnIn
 
 	}
 
-	console.log(`token updatated for turn at index ${completedTurnIndex}: -prompt:${promptMessage.id}): indivual=${promptMessage.individual_tokens}, aggregate=${promptMessage.aggregate_tokens_at_this_point}\n -response:${responseMessage.id}: individual=${responseMessage.individual_tokens} aggregate=${responseMessage.aggregate_tokens_at_this_point}`);
+	// console.log(`token updatated for turn at index ${completedTurnIndex}: -prompt:${promptMessage.id}): indivual=${promptMessage.individual_tokens}, aggregate=${promptMessage.aggregate_tokens_at_this_point}\n -response:${responseMessage.id}: individual=${responseMessage.individual_tokens} aggregate=${responseMessage.aggregate_tokens_at_this_point}`);
 }
 
 

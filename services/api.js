@@ -468,9 +468,9 @@ export async function coreOllamaRequestHTC(knotReference, skipHistoryUpdate = fa
 		responseMessage.content = "";
 
 		const payloadString = JSON.stringify(requestData);
-		console.log(`[coreOllamaRequestHTC] 📨 Dispatching fetch for Knot ${knotReference}`);
-		console.log(`[coreOllamaRequestHTC] 📏 Payload Size: ${payloadString.length} chars. Total Messages: ${requestData.messages.length}`);
-		console.log(`[coreOllamaRequestHTC] 📦 Raw Payload Object:`, requestData);
+		// console.log(`[coreOllamaRequestHTC] 📨 Dispatching fetch for Knot ${knotReference}`);
+		// console.log(`[coreOllamaRequestHTC] 📏 Payload Size: ${payloadString.length} chars. Total Messages: ${requestData.messages.length}`);
+		// console.log(`[coreOllamaRequestHTC] 📦 Raw Payload Object:`, requestData);
 
 		const response = await fetch('/api/chat.php', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: payloadString });
 		//XXX /api/chat.php for natively routed Apache deployments
@@ -595,11 +595,11 @@ export async function coreOllamaRequestHTC(knotReference, skipHistoryUpdate = fa
 			: (rules && rules.hasResponseCallback) ? rules.responseCallback : null;
 
 		if (callbackId && processingCallbacks[callbackId] && performCallbacks) {
-			console.log(`[api.js] 🔍 DEBUG: Triggering response callback: ${callbackId} for Knot: ${knotReference} \n [api.js] 🔍 DEBUG: Parsed JSON available: ${!!parsedJson}`);
+			// console.log(`[api.js] 🔍 DEBUG: Triggering response callback: ${callbackId} for Knot: ${knotReference} \n [api.js] 🔍 DEBUG: Parsed JSON available: ${!!parsedJson}`);
 			try {
 				const contextObj = { knot: knotReference, htcAddr: wdl_getHTCaddr(knotReference) };
 				finalContent = processingCallbacks[callbackId](finalContent, parsedJson, contextObj);
-				console.log(`[api.js] 🔍 DEBUG: Callback "${callbackId}" finished.`);
+				// console.log(`[api.js] 🔍 DEBUG: Callback "${callbackId}" finished.`);
 				responseMessage.content = finalContent;
 
 				// Re-render UI block to show post-processed changes

@@ -17,7 +17,7 @@ const getStatusDiv = () => document.getElementById('status');
 export function reconstructMessagesFromStack(){
 	const messagesToSend = [];
 	const messageHistoryStackDiv = getMessageHistoryStackDiv();
-	console.log("reconstructing messages for sending. current canonical history");
+	// console.log("reconstructing messages for sending. current canonical history");
 	for(let i = 0; i < messageHistory.length; i++){
 		const originalMessage = messageHistory[i];
 		const textareaElement = messageHistoryStackDiv ? messageHistoryStackDiv.querySelector(`textarea[data-message-index="${i}"]`) : null;
@@ -45,7 +45,7 @@ export function reconstructMessagesFromStack(){
 }
 
 async function handleSendPrompt( ){ 
-    console.log("handleSendPrompt #1");
+    // console.log("handleSendPrompt #1");
     const modelInput = getModelInput();
     const promptInput = getPromptInput();
     const numCtxSlider = getNumCtxSlider();
@@ -60,7 +60,7 @@ async function handleSendPrompt( ){
     const numCtx = numCtxSlider ? parseInt(numCtxSlider.value, 10) : 4096;
 
     if (!model || !userPrompt){
-	    console.log('handleSendPrompt() ERROR =please enter borht a model name and a prompt.');
+	    // console.log('handleSendPrompt() ERROR =please enter borht a model name and a prompt.');
 	    return;
 	}
 	let newUserMessage;
@@ -68,14 +68,14 @@ async function handleSendPrompt( ){
 		newUserMessage = {role: 'user', content: userPrompt, individual_tokens: null, aggregate_tokens: null };
 		promptInput.value = '';
 	} else if (messageHistory.length === 0){
-		console.log("cannot send empty prompt with no history;");
+		// console.log("cannot send empty prompt with no history;");
 		return;
 	}
 	if (toolOutputArea) toolOutputArea.textContent = '';
 	if (statusDiv) statusDiv.textContent = "preparing history and sending to ollama";
 	if (sendButton) sendButton.disabled = true;
 	
-	console.log("reconstructmessagesfromstack");
+	// console.log("reconstructmessagesfromstack");
 	const messagesToSend = reconstructMessagesFromStack();
 	await sendMessagesToOllama(model, messagesToSend, toolCapable , newUserMessage );
 }
@@ -89,12 +89,12 @@ async function SaveMessageHistory(messageHist = {}){
 		    body: historyJsonString,
 	    });
 	    if(response.ok){
-		    console.log("save history successful");
+		    // console.log("save history successful");
 	    } else {
-		    console.log('error saving history');
+		    // console.log('error saving history');
 	    }
     } catch(err){
-		console.log('error in SAVEHistory');
+		// console.log('error in SAVEHistory');
     }
 }
 	
@@ -110,7 +110,7 @@ export async function handleSaveHistory(){
 	try {
 		await SaveMessageHistory(messageHistory);
 	} catch (err) {
-		console.log(` error saving conversation history ${err.message}`);
+		// console.log(` error saving conversation history ${err.message}`);
 	} finally {
 		if (saveHistoryBut) saveHistoryBut.disabled = false;
 	}  

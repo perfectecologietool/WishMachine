@@ -55,37 +55,37 @@ export function loadQuipuKnots(quipuRegId) {
     currentKnotList = [];
     currentKnotIndex = 0;
 
-    console.log('[KnotReader] loadQuipuKnots called with quipuRegId:', quipuRegId);
+    // console.log('[KnotReader] loadQuipuKnots called with quipuRegId:', quipuRegId);
 
     const quipu = q1(quipuRegId);
-    console.log('[KnotReader] q1() returned:', quipu);
+    // console.log('[KnotReader] q1() returned:', quipu);
 
     if (!(quipu instanceof Quipu)) {
         displayEmpty(`Quipu not found (RegId: ${quipuRegId}, got: ${typeof quipu}).`);
-        console.warn('[KnotReader] quipu instanceof Quipu === false. Aborting.');
+        // console.warn('[KnotReader] quipu instanceof Quipu === false. Aborting.');
         return;
     }
 
-    console.log('[KnotReader] quipu.strands:', quipu.strands, '(length:', quipu.strands ? quipu.strands.length : 'N/A', ')');
+    // console.log('[KnotReader] quipu.strands:', quipu.strands, '(length:', quipu.strands ? quipu.strands.length : 'N/A', ')');
 
     // Walk strands top-to-bottom, knots left-to-right
     // quipu.strands entries are objects: {strandRegId, summaryTwoLayerId}
     for (const strandEntry of quipu.strands) {
         const sId = (typeof strandEntry === 'object' && strandEntry !== null) ? strandEntry.strandRegId : strandEntry;
         const strand = s1(sId);
-        console.log('[KnotReader]   strandEntry:', strandEntry, '→ sId:', sId, '→ s1() returned:', strand);
+        // console.log('[KnotReader]   strandEntry:', strandEntry, '→ sId:', sId, '→ s1() returned:', strand);
         if (!strand) {
-            console.warn('[KnotReader]   strand is null/undefined, skipping.');
+            // console.warn('[KnotReader]   strand is null/undefined, skipping.');
             continue;
         }
-        console.log('[KnotReader]   strand.knots:', strand.knots, '(length:', strand.knots ? strand.knots.length : 'N/A', ')');
+        // console.log('[KnotReader]   strand.knots:', strand.knots, '(length:', strand.knots ? strand.knots.length : 'N/A', ')');
         for (const knotRegId of strand.knots) {
-            console.log('[KnotReader]     pushing knotRegId:', knotRegId);
+            // console.log('[KnotReader]     pushing knotRegId:', knotRegId);
             currentKnotList.push(knotRegId);
         }
     }
 
-    console.log('[KnotReader] Final currentKnotList:', currentKnotList, '(length:', currentKnotList.length, ')');
+    // console.log('[KnotReader] Final currentKnotList:', currentKnotList, '(length:', currentKnotList.length, ')');
 
     if (currentKnotList.length === 0) {
         displayEmpty('This Quipu has no knots.');

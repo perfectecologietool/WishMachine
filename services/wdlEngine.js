@@ -265,7 +265,7 @@ function fetchBayesianMemory(kn) {
 export function wdlCompileInstructionSet(wdlText) {
     console.log("[WDL Compiler] Starting Compilation. Raw text length: " + wdlText.length);
     const lines = wdlText.split('\n');
-    console.log(`[WDL Compiler] Total lines to parse: ${lines.length}`);
+    // console.log(`[WDL Compiler] Total lines to parse: ${lines.length}`);
 
     let activeWish = null;
     let activePlan = null;  // holds d6
@@ -279,7 +279,7 @@ export function wdlCompileInstructionSet(wdlText) {
     for (let i = 0; i < lines.length; i++) {
         let line = lines[i].trim();
         if (!line || line.startsWith('//') || line.startsWith('#')) continue;
-        console.log(`[WDL Compiler] Parsing line ${i + 1}: "${line}"`);
+        // console.log(`[WDL Compiler] Parsing line ${i + 1}: "${line}"`);
 
         // --- Handle Multiline Text Accumulation ---
         if (multiLineState === "PROMPT" && activeKnot) {
@@ -709,7 +709,7 @@ export var processingCallbacks = {
                 const grandparentRow = d4(parentChoice.parentTrackId);
                 if (grandparentRow && grandparentRow instanceof Four_Component && grandparentRow.knowledgeNode && grandparentRow.knowledgeNode.rawJsonResponse) {
                     parentJson = grandparentRow.knowledgeNode.rawJsonResponse;
-                    console.log(`[interpolateDecomp] 🧠 Retrieved spec from grandparent KnowledgeNode: "${grandparentRow.name}"`);
+                    // console.log(`[interpolateDecomp] 🧠 Retrieved spec from grandparent KnowledgeNode: "${grandparentRow.name}"`);
                 }
             }
         }
@@ -958,7 +958,7 @@ export function buildSystemArchitectPrompt(knowledgeNode, targetLanguage) {
 
 export function WDLexpoundIgnite(responseText, parsedJsonObj = {}, contextObj = {}) {
     const knotRegId = contextObj.htcAddr ? contextObj.htcAddr[4] : contextObj.knot;
-    console.log(`[WDLexpoundIgnite] 🟢 ENTRY: Processing expound for Knot ID: ${knotRegId}`);
+    // console.log(`[WDLexpoundIgnite] 🟢 ENTRY: Processing expound for Knot ID: ${knotRegId}`);
 
     if (Array.isArray(parsedJsonObj) && parsedJsonObj.length > 0) {
         parsedJsonObj = parsedJsonObj[0];
@@ -971,7 +971,7 @@ export function WDLexpoundIgnite(responseText, parsedJsonObj = {}, contextObj = 
     }
 
     const topicName = parsedJsonObj.refined_goal || parsedJsonObj.expounded_wish || parsedJsonObj.original_wish || "Unknown System";
-    console.log(`[WDLexpoundIgnite] Refined topic: ${topicName}`);
+    // console.log(`[WDLexpoundIgnite] Refined topic: ${topicName}`);
 
     const parentRow = d4(originKnot.parentTrackId);
     if (parentRow && typeof parentRow.name === 'string') {
@@ -1004,7 +1004,7 @@ export function WDLexpoundIgnite(responseText, parsedJsonObj = {}, contextObj = 
  */
 export function WDLsensibleRecursiveDecomposition(responseText, parsedJsonObj = {}, contextObj = {}) {
     const knotRegId = contextObj.htcAddr ? contextObj.htcAddr[4] : contextObj.knot;
-    console.log(`[WDLsensibleDecomp] 🟢 ENTRY: Processing decomposition for Knot ID: ${knotRegId}`);
+    // console.log(`[WDLsensibleDecomp] 🟢 ENTRY: Processing decomposition for Knot ID: ${knotRegId}`);
 
     // Safety check: if parsedJsonObj is an array (due to extractJsonObject return type), take first element.
     if (Array.isArray(parsedJsonObj) && parsedJsonObj.length > 0) {
@@ -1016,7 +1016,7 @@ export function WDLsensibleRecursiveDecomposition(responseText, parsedJsonObj = 
         console.error(`[WDLsensibleDecomp] ❌ CRITICAL: Could not find origin knot object for ID: ${knotRegId}`);
         return responseText;
     }
-    console.log(`[WDLsensibleDecomp] originKnot.parentTrackId: ${originKnot.parentTrackId}`);
+    // console.log(`[WDLsensibleDecomp] originKnot.parentTrackId: ${originKnot.parentTrackId}`);
 
     if (knotRegId === undefined) {
         console.warn("[WDLsensibleDecomp] ❌ Missing knot context.");
@@ -1034,7 +1034,7 @@ export function WDLsensibleRecursiveDecomposition(responseText, parsedJsonObj = 
     if (originCell) {
         const originPrompt = d2(originCell.prompt);
         if (originPrompt && originPrompt.content && originPrompt.content.length > 50) {
-            console.log(`[WDLsensibleDecomp] 💎 Token conservation: Purging prompt context for "${parentSystemName}" (${knotRegId})`);
+            // console.log(`[WDLsensibleDecomp] 💎 Token conservation: Purging prompt context for "${parentSystemName}" (${knotRegId})`);
             originPrompt.content = `[Decomposition Context for: ${parentSystemName}]`;
         }
     }
@@ -1046,7 +1046,7 @@ export function WDLsensibleRecursiveDecomposition(responseText, parsedJsonObj = 
 
     const boundaries_of_system = parsedJsonObj.boundary_conditions || "";
 
-    console.log(`[WDLsensibleDecomp] Parsed parent: "${parentSystemName}". Found ${components.length} subcomponents.`);
+    // console.log(`[WDLsensibleDecomp] Parsed parent: "${parentSystemName}". Found ${components.length} subcomponents.`);
 
     // --- TERMINATION LIMIT ---
     const currentTotalRows = typeof FourRowArray !== 'undefined' ? FourRowArray.length : 0;
@@ -1064,7 +1064,7 @@ export function WDLsensibleRecursiveDecomposition(responseText, parsedJsonObj = 
 
     // --- Establish the WDL Parent Architecture ---
     const parentFourRowId = originKnot.parentTrackId;
-    console.log(`[WDLsensibleDecomp] Targeting parentFourRowId: ${parentFourRowId}`);
+    // console.log(`[WDLsensibleDecomp] Targeting parentFourRowId: ${parentFourRowId}`);
     const parentRow = d4(parentFourRowId);
     if (!parentRow) {
         console.error(`[WDLsensibleDecomp] ❌ CRITICAL: Parent row with ID ${parentFourRowId} not found in FourRowArray.`);
@@ -1081,7 +1081,7 @@ export function WDLsensibleRecursiveDecomposition(responseText, parsedJsonObj = 
     const ancestorAddresses = [...(originKnot.sourceContextKnotIds || [])];
     ancestorAddresses.push(parentAddressStr);
 
-    console.log(`[WDLsensibleDecomp] 🌳 BRANCHING: System "${parentSystemName}" splitting into ${components.length} parallel paths.`);
+    // console.log(`[WDLsensibleDecomp] 🌳 BRANCHING: System "${parentSystemName}" splitting into ${components.length} parallel paths.`);
 
     for (const component of components) {
         const compName = component.name || component.component_name || `Component`;
@@ -1134,8 +1134,8 @@ export function WDLsensibleRecursiveDecomposition(responseText, parsedJsonObj = 
             parentRow.knowledgeNode.addDependency(newRow.knowledgeNode);
         }
 
-        console.log(`[WDLsensibleDecomp]   ├─ Branch Created: "${compName}" (Type: ${component.type}, Imp: ${isImplementable}) -> Leaf: ${isLeaf}`);
-        console.log(`[WDLsensibleDecomp]   └─ New Choice ${newChoice.RegId} parentPlanId: ${newChoice.parentPlanId}`);
+        // console.log(`[WDLsensibleDecomp]   ├─ Branch Created: "${compName}" (Type: ${component.type}, Imp: ${isImplementable}) -> Leaf: ${isLeaf}`);
+        // console.log(`[WDLsensibleDecomp]   └─ New Choice ${newChoice.RegId} parentPlanId: ${newChoice.parentPlanId}`);
     }
 
     // After all components have been instantiated, append the Moral Verification Knot to the OrthoFourRow
@@ -1144,7 +1144,7 @@ export function WDLsensibleRecursiveDecomposition(responseText, parsedJsonObj = 
 
     const causalityGraph = generateCausalityMermaid(parsedJsonObj);
     if (causalityGraph) {
-        console.log(`[WDLsensibleDecomp] ⛓️ CAUSALITY GRAPH for ${parentSystemName}:\n${causalityGraph}`);
+        // console.log(`[WDLsensibleDecomp] ⛓️ CAUSALITY GRAPH for ${parentSystemName}:\n${causalityGraph}`);
     }
 
     // --- KnowledgeNode Storage ---
@@ -1153,7 +1153,7 @@ export function WDLsensibleRecursiveDecomposition(responseText, parsedJsonObj = 
     if (parentRowForK && parentRowForK.knowledgeNode) {
         parentRowForK.knowledgeNode.rawJsonResponse = parsedJsonObj;
         parentRowForK.knowledgeNode.mermaidGraph = causalityGraph;
-        console.log(`[WDLsensibleDecomp] 🧠 Stored Decomposition Knowledge inside "${parentSystemName}"`);
+        // console.log(`[WDLsensibleDecomp] 🧠 Stored Decomposition Knowledge inside "${parentSystemName}"`);
     }
 
     // --- HyperHop Ontology Integration ---
@@ -1173,7 +1173,7 @@ export function WDLsensibleRecursiveDecomposition(responseText, parsedJsonObj = 
 
     if (!window.DecompositionWaveFront) window.DecompositionWaveFront = [];
     window.DecompositionWaveFront.push({ type: 'parallel', id: newChoice.RegId });
-    console.log(`[WaveFront] Pushed Five_Parallel ${newChoice.RegId} to explicit queue. Length: ${window.DecompositionWaveFront.length}`);
+    // console.log(`[WaveFront] Pushed Five_Parallel ${newChoice.RegId} to explicit queue. Length: ${window.DecompositionWaveFront.length}`);
 
     return responseText;
 }
@@ -1301,13 +1301,13 @@ export function generateOntoHop(parsedJsonObj, subcomponents, parentSystemName, 
     // 5. Link to Argument (Six_Plan)
     if (activePlan) {
         activePlan.addNode(hop.RegId);
-        console.log(`[generateOntoHop] 🗳️ Added Hop ${hop.RegId} to Six_Plan "${activePlan.name}" argument nodes.`);
+        // console.log(`[generateOntoHop] 🗳️ Added Hop ${hop.RegId} to Six_Plan "${activePlan.name}" argument nodes.`);
         // Ensure the argument is registered in the ontology
         if (!ont.graph.arguments.includes(activePlan.RegId)) {
             ont.addGraphElement('arguments', activePlan.RegId);
         }
     }
-    console.log(`${hop.toJson()}`);
+    // console.log(`${hop.toJson()}`);
     return hop;
 }
 
@@ -1318,27 +1318,27 @@ export function generateOntoHop(parsedJsonObj, subcomponents, parentSystemName, 
  * @returns 
  */
 export function buildWDLRecompositionPlan(wishRegId) {
-    console.log(`[buildRecomp] 🟢 ENTRY with wishRegId: ${wishRegId}`);
+    // console.log(`[buildRecomp] 🟢 ENTRY with wishRegId: ${wishRegId}`);
 
     // DynamicTableState.scenario IS the wish object directly, not a RegId
     const wish = (typeof wishRegId === 'object' && wishRegId !== null) ? wishRegId : (typeof d7 === 'function' ? d7(wishRegId) : null);
-    console.log(`[buildRecomp] wish resolved:`, wish);
+    // console.log(`[buildRecomp] wish resolved:`, wish);
     if (!wish) {
         console.error("buildWDLRecompositionPlan: Invalid Seven_Wish", wishRegId);
         return null;
     }
-    console.log(`[buildRecomp] wish.decomposition = ${wish.decomposition}, wish.recomposition = ${wish.recomposition}`);
+    // console.log(`[buildRecomp] wish.decomposition = ${wish.decomposition}, wish.recomposition = ${wish.recomposition}`);
 
     const decompPlan = typeof d6 === 'function' ? d6(wish.decomposition) : null;
-    console.log(`[buildRecomp] decompPlan:`, decompPlan);
+    // console.log(`[buildRecomp] decompPlan:`, decompPlan);
     if (!decompPlan || !decompPlan.steps || decompPlan.steps.length === 0) {
         console.error("buildWDLRecompositionPlan: Decomposition plan is empty.", decompPlan);
         return null;
     }
-    console.log(`[buildRecomp] decompPlan.steps:`, decompPlan.steps, `decompPlan.tracks:`, decompPlan.tracks);
+    // console.log(`[buildRecomp] decompPlan.steps:`, decompPlan.steps, `decompPlan.tracks:`, decompPlan.tracks);
 
     const recompPlan = typeof d6 === 'function' ? d6(wish.recomposition) : null;
-    console.log(`[buildRecomp] recompPlan:`, recompPlan);
+    // console.log(`[buildRecomp] recompPlan:`, recompPlan);
     if (!recompPlan) {
         console.error("buildWDLRecompositionPlan: Recomposition plan not initialized.");
         return null;
@@ -1353,14 +1353,14 @@ export function buildWDLRecompositionPlan(wishRegId) {
     // Recursive function to collect nodes post-order (leaves first, roots last)
     const orderedRows = [];
     function traverse(choiceId) {
-        console.log(`[buildRecomp]   traverse(choiceId=${choiceId})`);
+        // console.log(`[buildRecomp]   traverse(choiceId=${choiceId})`);
         const choice = d5(choiceId);
         if (!choice) { console.warn(`[buildRecomp]   d5(${choiceId}) returned null`); return; }
-        console.log(`[buildRecomp]   choice.branches:`, choice.branches);
+        // console.log(`[buildRecomp]   choice.branches:`, choice.branches);
         choice.branches.forEach(rowId => {
             const row = d4(rowId);
             if (!row) { console.warn(`[buildRecomp]     d4(${rowId}) returned null`); return; }
-            console.log(`[buildRecomp]     row "${row.name}" (RegId=${row.RegId}), terminatingChoice=${row.terminatingChoice}`);
+            // console.log(`[buildRecomp]     row "${row.name}" (RegId=${row.RegId}), terminatingChoice=${row.terminatingChoice}`);
             if (row.terminatingChoice) {
                 traverse(row.terminatingChoice);
             }
@@ -1370,13 +1370,13 @@ export function buildWDLRecompositionPlan(wishRegId) {
 
     traverse(decompPlan.steps[0]);
     console.log(`[buildRecomp] Post-order traversal complete. orderedRows.length = ${orderedRows.length}`);
-    orderedRows.forEach((r, i) => console.log(`[buildRecomp]   [${i}] "${r.name}" (RegId=${r.RegId}, isLeaf=${!r.terminatingChoice})`));
+    // orderedRows.forEach((r, i) => console.log(`[buildRecomp]   [${i}] "${r.name}" (RegId=${r.RegId}, isLeaf=${!r.terminatingChoice})`));
 
     if (orderedRows.length === 0) { console.warn('[buildRecomp] No rows found! Aborting.'); return null; }
 
     // Use a single entry choice for the entire recomp plan starts
     const rootRecompChoice = wdl_addChoice(recompPlan.RegId, "Recomposition Start");
-    console.log(`[buildRecomp] rootRecompChoice created: RegId=${rootRecompChoice.RegId}`);
+    // console.log(`[buildRecomp] rootRecompChoice created: RegId=${rootRecompChoice.RegId}`);
 
     orderedRows.forEach(decompNode => {
         const isLeaf = !decompNode.terminatingChoice;
@@ -1405,7 +1405,7 @@ export function buildWDLRecompositionPlan(wishRegId) {
 
         if (kn && kn.rawJsonResponse) {
             const specSubCount = kn.rawJsonResponse.subcomponents ? kn.rawJsonResponse.subcomponents.length : 0;
-            console.log(`[buildRecomp] 🧠 KnowledgeNode for "${knLabel}": ${specSubCount} subcomponents, ${kn.dependencies.length} child dependencies.`);
+            // console.log(`[buildRecomp] 🧠 KnowledgeNode for "${knLabel}": ${specSubCount} subcomponents, ${kn.dependencies.length} child dependencies.`);
         } else {
             console.warn(`[buildRecomp] ⚠️ No KnowledgeNode spec for "${knLabel}". Prompts will use fallback.`);
         }

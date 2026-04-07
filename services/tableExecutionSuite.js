@@ -21,7 +21,7 @@ const statusDiv = {
 const getExecControls = () => document.querySelectorAll(`.execution-controls button`);
 
 export async function handleExecuteSingleTurn(knotRegId) {
-	console.log(`executing turn for cell id ${knotRegId}`);
+	// console.log(`executing turn for cell id ${knotRegId}`);
 	statusDiv.textContent += "<br>executing turn...";
 	document.querySelectorAll(`button`).forEach(b => b.disabled = true);
 	const success = await coreOllamaRequestHTC(knotRegId);
